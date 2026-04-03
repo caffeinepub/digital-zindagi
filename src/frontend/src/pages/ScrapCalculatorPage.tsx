@@ -1,6 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Calculator, Plus, RotateCcw, Trash2 } from "lucide-react";
+import {
+  Calculator,
+  FileText,
+  MessageCircle,
+  Plus,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -16,6 +23,25 @@ interface ScrapRow {
 }
 
 let nextId = 4;
+
+// ── V102: Sticky Rate Memo ────────────────────────────────────────────────────
+const RATE_MEMO_KEY = "dz_rate_memo";
+
+function getSavedRates(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(RATE_MEMO_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveRate(itemName: string, rate: string) {
+  if (!itemName.trim()) return;
+  const memo = getSavedRates();
+  memo[itemName.trim()] = rate;
+  localStorage.setItem(RATE_MEMO_KEY, JSON.stringify(memo));
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function getAdminRates(): { lohaa: string; kaagaz: string; taamba: string } {
   try {
@@ -42,28 +68,51 @@ function formatINR(value: number): string {
 
 export default function ScrapCalculatorPage() {
   const bannerVisible = useAdMobBannerVisible();
+
+  // V102: On init, prefer saved rates over admin defaults
   const [rows, setRows] = useState<ScrapRow[]>(() => {
     const rates = getAdminRates();
+    const saved = getSavedRates();
     return [
-      { id: 1, item: "Lohaa (Iron)", weight: "", rate: rates.lohaa },
-      { id: 2, item: "Kaagaz (Paper)", weight: "", rate: rates.kaagaz },
-      { id: 3, item: "Taamba (Copper)", weight: "", rate: rates.taamba },
+      {
+        id: 1,
+        item: "Lohaa (Iron)",
+        weight: "",
+        rate: saved["Lohaa (Iron)"] ?? rates.lohaa,
+      },
+      {
+        id: 2,
+        item: "Kaagaz (Paper)",
+        weight: "",
+        rate: saved["Kaagaz (Paper)"] ?? rates.kaagaz,
+      },
+      {
+        id: 3,
+        item: "Taamba (Copper)",
+        weight: "",
+        rate: saved["Taamba (Copper)"] ?? rates.taamba,
+      },
     ];
   });
   const [adminRatesLoaded, setAdminRatesLoaded] = useState(false);
 
-  // Sync rates from admin panel on mount
+  // Sync rates from admin panel on mount (only if no user override)
   useEffect(() => {
     const rates = getAdminRates();
     const hasCustomRates =
       rates.lohaa !== "25" || rates.kaagaz !== "8" || rates.taamba !== "450";
     if (hasCustomRates) {
       setAdminRatesLoaded(true);
+      const saved = getSavedRates();
       setRows((prev) =>
         prev.map((r) => {
-          if (r.item === "Lohaa (Iron)") return { ...r, rate: rates.lohaa };
-          if (r.item === "Kaagaz (Paper)") return { ...r, rate: rates.kaagaz };
-          if (r.item === "Taamba (Copper)") return { ...r, rate: rates.taamba };
+          // User-saved rate takes priority over admin default
+          if (r.item === "Lohaa (Iron)")
+            return { ...r, rate: saved["Lohaa (Iron)"] ?? rates.lohaa };
+          if (r.item === "Kaagaz (Paper)")
+            return { ...r, rate: saved["Kaagaz (Paper)"] ?? rates.kaagaz };
+          if (r.item === "Taamba (Copper)")
+            return { ...r, rate: saved["Taamba (Copper)"] ?? rates.taamba };
           return r;
         }),
       );
@@ -72,10 +121,22 @@ export default function ScrapCalculatorPage() {
 
   const grandTotal = rows.reduce((sum, row) => sum + rowTotal(row), 0);
 
+  // V102: updateRow — auto-save rate to localStorage on change
   const updateRow = (id: number, field: keyof ScrapRow, value: string) => {
-    setRows((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)),
-    );
+    setRows((prev) => {
+      const updated = prev.map((r) =>
+        r.id === id ? { ...r, [field]: value } : r,
+      );
+      if (field === "rate") {
+        const row = updated.find((r) => r.id === id);
+        if (row?.item) saveRate(row.item, value);
+      }
+      if (field === "item") {
+        const row = updated.find((r) => r.id === id);
+        if (row?.rate) saveRate(value, row.rate);
+      }
+      return updated;
+    });
   };
 
   const addRow = () => {
@@ -112,6 +173,63 @@ export default function ScrapCalculatorPage() {
       }),
     );
     toast.success("Admin rates reload ho gayi!");
+  };
+
+  // ── V102: WhatsApp Share ──────────────────────────────────────────────────
+  const handleWhatsAppShare = () => {
+    const lines = rows
+      .filter((r) => r.item.trim())
+      .map(
+        (r) =>
+          `• ${r.item}: ${r.weight || 0} KG × ₹${r.rate || 0}/KG = ${formatINR(rowTotal(r))}`,
+      );
+    const text = `🧮 *Rate Memo - Digital Zindagi*\n\n${lines.join("\n")}\n\n💰 *Grand Total: ${formatINR(grandTotal)}*\n\n_Digital Zindagi App se bheja gaya_`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+  };
+
+  // ── V102: PDF Download ────────────────────────────────────────────────────
+  const handleDownloadPDF = () => {
+    const rowsHtml = rows
+      .filter((r) => r.item.trim())
+      .map(
+        (r, i) => `<tr>
+      <td>${i + 1}</td>
+      <td>${r.item}</td>
+      <td>${r.weight || 0} KG</td>
+      <td>₹${r.rate || 0}/KG</td>
+      <td><strong>${formatINR(rowTotal(r))}</strong></td>
+    </tr>`,
+      )
+      .join("");
+
+    const html = `<!DOCTYPE html><html><head><title>Rate Memo - Digital Zindagi</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 24px; color: #1a1a1a; }
+      h2 { color: #059669; margin-bottom: 4px; }
+      p.subtitle { color: #6b7280; font-size: 13px; margin-top: 0; }
+      table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+      th, td { border: 1px solid #d1fae5; padding: 10px 14px; text-align: left; font-size: 14px; }
+      th { background: #f0fdf4; color: #065f46; font-weight: 700; }
+      tr:nth-child(even) { background: #f9fafb; }
+      .grand-total { margin-top: 20px; font-size: 22px; font-weight: bold; color: #059669; padding: 12px 16px; background: #ecfdf5; border-radius: 8px; display: inline-block; }
+      .footer { margin-top: 28px; font-size: 11px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 12px; }
+    </style></head><body>
+    <h2>🧮 Rate Memo</h2>
+    <p class="subtitle">Digital Zindagi — Scrap Calculator</p>
+    <table>
+      <thead><tr><th>#</th><th>Item</th><th>Weight</th><th>Rate</th><th>Total</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    <div class="grand-total">💰 Grand Total: ${formatINR(grandTotal)}</div>
+    <div class="footer">Generated by Digital Zindagi App &nbsp;|&nbsp; © 2026 Digital Zindagi</div>
+    </body></html>`;
+
+    const win = window.open("", "_blank");
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      win.print();
+    }
   };
 
   return (
@@ -191,6 +309,13 @@ export default function ScrapCalculatorPage() {
                       onChange={(e) =>
                         updateRow(row.id, "item", e.target.value)
                       }
+                      onBlur={(e) => {
+                        const saved = getSavedRates();
+                        const savedRate = saved[e.target.value.trim()];
+                        if (savedRate && !row.rate) {
+                          updateRow(row.id, "rate", savedRate);
+                        }
+                      }}
                       placeholder="e.g. Lohaa, Taamba..."
                       className="h-9 text-sm"
                     />
@@ -247,6 +372,13 @@ export default function ScrapCalculatorPage() {
                     data-ocid={`calculator.input.${i + 1}`}
                     value={row.item}
                     onChange={(e) => updateRow(row.id, "item", e.target.value)}
+                    onBlur={(e) => {
+                      const saved = getSavedRates();
+                      const savedRate = saved[e.target.value.trim()];
+                      if (savedRate && !row.rate) {
+                        updateRow(row.id, "rate", savedRate);
+                      }
+                    }}
                     placeholder="Item ka naam..."
                     aria-label={`Item ${i + 1} naam`}
                     className="h-9 text-sm"
@@ -351,6 +483,27 @@ export default function ScrapCalculatorPage() {
           </Button>
         </div>
 
+        {/* V102: WhatsApp Share & PDF Download Buttons */}
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <Button
+            data-ocid="calculator.secondary_button"
+            onClick={handleDownloadPDF}
+            variant="outline"
+            className="w-full h-12 text-base font-semibold rounded-xl flex items-center justify-center gap-2 border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+          >
+            <FileText size={16} />
+            PDF Download
+          </Button>
+          <Button
+            data-ocid="calculator.primary_button"
+            onClick={handleWhatsAppShare}
+            className="w-full h-12 text-base font-semibold rounded-xl flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white"
+          >
+            <MessageCircle size={16} />
+            WhatsApp Share
+          </Button>
+        </div>
+
         {/* Admin rates sync info */}
         <div className="mt-4 flex flex-col items-center gap-2">
           {adminRatesLoaded && (
@@ -361,6 +514,9 @@ export default function ScrapCalculatorPage() {
           <p className="text-center text-xs text-muted-foreground">
             💡 Rate automatically calculate hoti hai jab aap weight ya rate
             dalte hain
+          </p>
+          <p className="text-center text-xs text-emerald-600 font-medium">
+            💾 Aapke rates automatically save hote hain
           </p>
           <button
             type="button"
