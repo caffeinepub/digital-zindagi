@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AdminConfig,
   Banner,
+  Order,
   ProviderProfile,
   SubscriptionPricing,
   User,
@@ -153,6 +154,18 @@ export function useProvidersPendingApproval() {
   });
 }
 
+export function useAllProviders() {
+  const { actor, isFetching } = useActor();
+  return useQuery<ProviderProfile[]>({
+    queryKey: ["allProviders"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getAllProviders();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
 export function useUpdateToggle() {
   const { actor } = useActor();
   const qc = useQueryClient();
@@ -191,5 +204,32 @@ export function useRejectProvider() {
     },
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ["providersPendingApproval"] }),
+  });
+}
+
+export function useProviderOrders(userId: bigint | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<Order[]>({
+    queryKey: ["providerOrders", userId?.toString()],
+    queryFn: async () => {
+      if (!actor || userId === null) return [];
+      return actor.getProviderOrders(userId);
+    },
+    enabled: !!actor && !isFetching && userId !== null,
+  });
+}
+
+export function useUpdateOrderStatus() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      orderId,
+      status,
+    }: { orderId: bigint; status: string }) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.updateOrderStatus(orderId, status);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["providerOrders"] }),
   });
 }

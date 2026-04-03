@@ -2,6 +2,7 @@ import { Search } from "lucide-react";
 import { motion } from "motion/react";
 import {
   ApprovalStatus,
+  PlanType,
   SubscriptionPlan,
   SubscriptionStatus,
 } from "../backend";
@@ -61,6 +62,8 @@ export default function SearchPage() {
                     subscriptionPlan: SubscriptionPlan.oneMonth,
                     approvalStatus: ApprovalStatus.approved,
                     photos: [],
+                    upiId: "",
+                    planType: PlanType.pending,
                   }}
                   user={u}
                   index={i + 1}

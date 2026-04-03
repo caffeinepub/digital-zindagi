@@ -19,12 +19,7 @@ export interface ServiceRate {
     description: string;
     price: bigint;
 }
-export interface UserProfile {
-    userId: bigint;
-    name: string;
-    role: UserRole;
-    mobile: MobileNumber;
-}
+export type MobileNumber = string;
 export interface User {
     id: bigint;
     name: string;
@@ -34,6 +29,17 @@ export interface User {
     securityAnswer: string;
     passwordHash: string;
     mobile: MobileNumber;
+}
+export interface Order {
+    id: bigint;
+    customerName: string;
+    status: string;
+    createdAt: bigint;
+    description: string;
+    orderType: string;
+    imageUrl?: string;
+    customerId: bigint;
+    providerId: bigint;
 }
 export interface UserApprovalInfo {
     status: ApprovalStatus;
@@ -70,15 +76,28 @@ export interface ProviderProfile {
     paymentScreenshotBlobId?: string;
     address: string;
     serviceRates: Array<ServiceRate>;
+    upiId: string;
     shopName: string;
     category: string;
+    qrCodeBlobId?: string;
+    planType: PlanType;
     photos: Array<string>;
 }
-export type MobileNumber = string;
+export interface UserProfile {
+    userId: bigint;
+    name: string;
+    role: UserRole;
+    mobile: MobileNumber;
+}
 export enum ApprovalStatus {
     pending = "pending",
     approved = "approved",
     rejected = "rejected"
+}
+export enum PlanType {
+    pending = "pending",
+    premium = "premium",
+    free = "free"
 }
 export enum SubscriptionPlan {
     twelveMonths = "twelveMonths",
@@ -115,10 +134,15 @@ export interface backendInterface {
     getActiveBanners(): Promise<Array<Banner>>;
     getActiveProviders(): Promise<Array<ProviderProfile>>;
     getAdminConfig(): Promise<AdminConfig | null>;
+    getAllProviders(): Promise<Array<ProviderProfile>>;
     getAllToggles(): Promise<Array<[string, boolean]>>;
     getAllUsers(): Promise<Array<User>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole__1>;
+    getCustomerOrders(userId: bigint): Promise<Array<Order>>;
+    getOrderById(orderId: bigint): Promise<Order | null>;
+    getOrdersByStatus(userId: bigint, status: string): Promise<Array<Order>>;
+    getProviderOrders(userId: bigint): Promise<Array<Order>>;
     getProviderProfile(userId: bigint): Promise<ProviderProfile | null>;
     getProvidersByCategory(category: string): Promise<Array<ProviderProfile>>;
     getProvidersPendingApproval(): Promise<Array<ProviderProfile>>;
@@ -132,6 +156,7 @@ export interface backendInterface {
     isCallerApproved(): Promise<boolean>;
     listApprovals(): Promise<Array<UserApprovalInfo>>;
     login(mobile: MobileNumber, passwordHash: string): Promise<User>;
+    placeOrder(providerId: bigint, customerName: string, description: string, orderType: string, imageUrl: string | null): Promise<bigint>;
     registerUser(name: string, mobile: MobileNumber, passwordHash: string, role: UserRole, securityQuestion: string, securityAnswer: string): Promise<void>;
     rejectProvider(userId: bigint): Promise<void>;
     removeShopPhoto(userId: bigint, blobId: string): Promise<void>;
@@ -139,8 +164,14 @@ export interface backendInterface {
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     searchUsers(searchText: string): Promise<Array<User>>;
     setApproval(user: Principal, status: ApprovalStatus): Promise<void>;
+    setPlanType(userId: bigint, planType: PlanType): Promise<void>;
     updateAdminConfig(newConfig: AdminConfig): Promise<void>;
+    updateOrderStatus(orderId: bigint, status: string): Promise<void>;
     updateProviderProfile(userId: bigint, shopName: string, description: string, address: string, category: string): Promise<void>;
+    /**
+     * / Extended updateProviderProfile to include upiId and qrCodeBlobId
+     */
+    updateProviderProfileFull(userId: bigint, shopName: string, description: string, address: string, category: string, upiId: string, qrCodeBlobId: string | null): Promise<void>;
     updateSubscriptionPricing(newPricing: SubscriptionPricing): Promise<void>;
     updateToggle(toggleName: string, value: boolean): Promise<void>;
     uploadPaymentScreenshot(userId: bigint, blobId: string): Promise<void>;

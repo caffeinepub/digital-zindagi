@@ -31,6 +31,20 @@ export interface Banner {
 }
 export type ExternalBlob = Uint8Array;
 export type MobileNumber = string;
+export interface Order {
+  'id' : bigint,
+  'customerName' : string,
+  'status' : string,
+  'createdAt' : bigint,
+  'description' : string,
+  'orderType' : string,
+  'imageUrl' : [] | [string],
+  'customerId' : bigint,
+  'providerId' : bigint,
+}
+export type PlanType = { 'pending' : null } |
+  { 'premium' : null } |
+  { 'free' : null };
 export interface ProviderProfile {
   'userId' : bigint,
   'subscriptionExpiry' : [] | [bigint],
@@ -41,8 +55,11 @@ export interface ProviderProfile {
   'paymentScreenshotBlobId' : [] | [string],
   'address' : string,
   'serviceRates' : Array<ServiceRate>,
+  'upiId' : string,
   'shopName' : string,
   'category' : string,
+  'qrCodeBlobId' : [] | [string],
+  'planType' : PlanType,
   'photos' : Array<string>,
 }
 export interface ServiceRate {
@@ -132,10 +149,15 @@ export interface _SERVICE {
   'getActiveBanners' : ActorMethod<[], Array<Banner>>,
   'getActiveProviders' : ActorMethod<[], Array<ProviderProfile>>,
   'getAdminConfig' : ActorMethod<[], [] | [AdminConfig]>,
+  'getAllProviders' : ActorMethod<[], Array<ProviderProfile>>,
   'getAllToggles' : ActorMethod<[], Array<[string, boolean]>>,
   'getAllUsers' : ActorMethod<[], Array<User>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole__1>,
+  'getCustomerOrders' : ActorMethod<[bigint], Array<Order>>,
+  'getOrderById' : ActorMethod<[bigint], [] | [Order]>,
+  'getOrdersByStatus' : ActorMethod<[bigint, string], Array<Order>>,
+  'getProviderOrders' : ActorMethod<[bigint], Array<Order>>,
   'getProviderProfile' : ActorMethod<[bigint], [] | [ProviderProfile]>,
   'getProvidersByCategory' : ActorMethod<[string], Array<ProviderProfile>>,
   'getProvidersPendingApproval' : ActorMethod<[], Array<ProviderProfile>>,
@@ -149,6 +171,10 @@ export interface _SERVICE {
   'isCallerApproved' : ActorMethod<[], boolean>,
   'listApprovals' : ActorMethod<[], Array<UserApprovalInfo>>,
   'login' : ActorMethod<[MobileNumber, string], User>,
+  'placeOrder' : ActorMethod<
+    [bigint, string, string, string, [] | [string]],
+    bigint
+  >,
   'registerUser' : ActorMethod<
     [string, MobileNumber, string, UserRole, string, string],
     undefined
@@ -159,9 +185,18 @@ export interface _SERVICE {
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'searchUsers' : ActorMethod<[string], Array<User>>,
   'setApproval' : ActorMethod<[Principal, ApprovalStatus], undefined>,
+  'setPlanType' : ActorMethod<[bigint, PlanType], undefined>,
   'updateAdminConfig' : ActorMethod<[AdminConfig], undefined>,
+  'updateOrderStatus' : ActorMethod<[bigint, string], undefined>,
   'updateProviderProfile' : ActorMethod<
     [bigint, string, string, string, string],
+    undefined
+  >,
+  /**
+   * / Extended updateProviderProfile to include upiId and qrCodeBlobId
+   */
+  'updateProviderProfileFull' : ActorMethod<
+    [bigint, string, string, string, string, string, [] | [string]],
     undefined
   >,
   'updateSubscriptionPricing' : ActorMethod<[SubscriptionPricing], undefined>,

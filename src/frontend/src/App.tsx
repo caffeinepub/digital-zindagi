@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { useEffect } from "react";
 import { UserRole } from "./backend";
+import SplashScreen from "./components/SplashScreen";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { BrowserRouter, Navigate, Route, Routes } from "./lib/router";
@@ -9,14 +10,18 @@ import AboutPage from "./pages/AboutPage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
 import AdminPinPage from "./pages/AdminPinPage";
 import CategoryPage from "./pages/CategoryPage";
+import ChoosePlanPage from "./pages/ChoosePlanPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
+import ManagerDashboardPage from "./pages/ManagerDashboardPage";
+import ManagerLoginPage from "./pages/ManagerLoginPage";
 import OrdersPage from "./pages/OrdersPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import ProviderDashboardPage from "./pages/ProviderDashboardPage";
 import ProviderProfilePage from "./pages/ProviderProfilePage";
 import ProviderSubscribePage from "./pages/ProviderSubscribePage";
+import ScrapCalculatorPage from "./pages/ScrapCalculatorPage";
 import SearchPage from "./pages/SearchPage";
 import SignupPage from "./pages/SignupPage";
 import TermsPage from "./pages/TermsPage";
@@ -37,6 +42,19 @@ function ProviderRoute({ children }: { children: React.ReactNode }) {
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const adminVerified = sessionStorage.getItem("adminVerified") === "true";
   if (!adminVerified) return <Navigate to="/admin/pin" replace />;
+  return <>{children}</>;
+}
+
+function ManagerRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading)
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <span className="text-primary">Load Ho Raha Hai...</span>
+      </div>
+    );
+  if (!user || user.role !== "manager")
+    return <Navigate to="/manager-login" replace />;
   return <>{children}</>;
 }
 
@@ -69,6 +87,24 @@ function AppRoutes() {
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/about" element={<AboutPage />} />
       <Route path="/orders" element={<OrdersPage />} />
+      <Route path="/scrap-calculator" element={<ScrapCalculatorPage />} />
+      <Route path="/manager-login" element={<ManagerLoginPage />} />
+      <Route
+        path="/manager"
+        element={
+          <ManagerRoute>
+            <ManagerDashboardPage />
+          </ManagerRoute>
+        }
+      />
+      <Route
+        path="/provider/choose-plan"
+        element={
+          <ProviderRoute>
+            <ChoosePlanPage />
+          </ProviderRoute>
+        }
+      />
       <Route
         path="/provider/subscribe"
         element={
@@ -104,7 +140,9 @@ export default function App() {
     <AuthProvider>
       <LanguageProvider>
         <BrowserRouter>
-          <AppRoutes />
+          <SplashScreen>
+            <AppRoutes />
+          </SplashScreen>
           <Toaster richColors position="top-right" />
         </BrowserRouter>
       </LanguageProvider>

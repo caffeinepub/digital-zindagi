@@ -5,22 +5,22 @@ import Footer from "../components/Footer";
 import Header from "../components/Header";
 import ProviderCard from "../components/ProviderCard";
 import { useProvidersByCategory } from "../hooks/useQueries";
-import { useParams } from "../lib/router";
+import { useNavigate, useParams } from "../lib/router";
 import { OrderModal } from "./OrdersPage";
 
 const CATEGORY_EMOJIS: Record<string, string> = {
-  Scrap: "♻️",
-  Doctor: "🏥",
-  Market: "🛒",
-  Labor: "👷",
-  Electronics: "📱",
-  Plumber: "🔧",
-  Carpenter: "🪚",
-  Tutor: "📚",
-  Electrician: "⚡",
-  Painter: "🎨",
-  Tailor: "✂️",
-  Salon: "💇",
+  Scrap: "\u267b\ufe0f",
+  Doctor: "\ud83c\udfe5",
+  Market: "\ud83d\uded2",
+  Labor: "\ud83d\udc77",
+  Electronics: "\ud83d\udcf1",
+  Plumber: "\ud83d\udd27",
+  Carpenter: "\ud83e\udea9",
+  Tutor: "\ud83d\udcda",
+  Electrician: "\u26a1",
+  Painter: "\ud83c\udfa8",
+  Tailor: "\u2702\ufe0f",
+  Salon: "\ud83d\udc87",
 };
 
 export default function CategoryPage() {
@@ -28,7 +28,8 @@ export default function CategoryPage() {
   const { data: providers, isLoading } = useProvidersByCategory(
     categoryName ?? "",
   );
-  const emoji = CATEGORY_EMOJIS[categoryName ?? ""] ?? "🏪";
+  const emoji = CATEGORY_EMOJIS[categoryName ?? ""] ?? "\ud83c\udffb";
+  const navigate = useNavigate();
 
   const [orderModal, setOrderModal] = useState<{
     open: boolean;
@@ -36,18 +37,36 @@ export default function CategoryPage() {
     providerName: string;
   }>({ open: false, providerId: "", providerName: "" });
 
+  const isScrap = categoryName === "Scrap";
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
 
       <div className="bg-emerald-header text-white px-4 py-6">
         <div className="max-w-7xl mx-auto">
-          <h1 className="font-heading font-bold text-2xl">
-            {emoji} {categoryName} Providers
-          </h1>
-          <p className="text-white/70 text-sm mt-1">
-            Is category ke sare approved providers
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="font-heading font-bold text-2xl">
+                {emoji} {categoryName} Providers
+              </h1>
+              <p className="text-white/70 text-sm mt-1">
+                Is category ke sare approved providers
+              </p>
+            </div>
+
+            {/* Scrap Calculator shortcut button */}
+            {isScrap && (
+              <button
+                type="button"
+                data-ocid="category.secondary_button"
+                onClick={() => navigate("/scrap-calculator")}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full border-2 border-white/50 text-white text-sm font-semibold hover:bg-white/15 hover:border-white transition-colors"
+              >
+                \u267b\ufe0f Scrap Calculator
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

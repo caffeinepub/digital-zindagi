@@ -3,8 +3,8 @@ import MixinAuthorization "authorization/MixinAuthorization";
 import MixinStorage "blob-storage/Mixin";
 import UserApproval "user-approval/approval";
 import Storage "blob-storage/Storage";
-import Array "mo:core/Array";
 import Map "mo:core/Map";
+import Array "mo:core/Array";
 import Iter "mo:core/Iter";
 import Time "mo:core/Time";
 import Runtime "mo:core/Runtime";
@@ -13,7 +13,33 @@ import Text "mo:core/Text";
 import Order "mo:core/Order";
 import Principal "mo:core/Principal";
 
-actor {
+
+// The persistent actor sculpture, defined with `persistent` fields:
+
+persistent actor {
+  type MobileNumber = Text;
+  type PlanType = {
+    #pending;
+    #premium;
+    #free;
+  };
+
+  // Persistent State
+  var users = Map.empty<MobileNumber, User>();
+  var userIdToPrincipal = Map.empty<Nat, Principal>();
+  var principalToUserId = Map.empty<Principal, Nat>();
+  var userProfiles = Map.empty<Principal, UserProfile>();
+  var providerProfiles = Map.empty<Nat, ProviderProfile>();
+  var toggles = Map.empty<Text, Bool>();
+  var orders = Map.empty<Nat, Order>();
+  var banners = Map.empty<Nat, Banner>();
+  var nextUserId = 1;
+  var nextOrderId = 1;
+  var nextBannerId = 1;
+  var adminConfig : ?AdminConfig = null;
+  var subscriptionPricing : ?SubscriptionPricing = null;
+  var adminPinHash : Text = "1234";
+
   // Include prefabricated components
   include MixinStorage();
   let accessControlState = AccessControl.initState();
@@ -22,8 +48,6 @@ actor {
   let approvalState = UserApproval.initState(accessControlState);
 
   // Type Definitions
-  type MobileNumber = Text;
-
   type UserRole = {
     #customer;
     #provider;
@@ -84,7 +108,10 @@ actor {
     subscriptionExpiry : ?Int;
     paymentScreenshotBlobId : ?Text;
     approvalStatus : ApprovalStatus;
+    upiId : Text;
+    qrCodeBlobId : ?Text;
     photos : [Text];
+    planType : PlanType;
   };
 
   module ProviderProfile {
@@ -117,6 +144,18 @@ actor {
     displayOrder : Nat;
   };
 
+  type Order = {
+    id : Nat;
+    customerId : Nat;
+    providerId : Nat;
+    customerName : Text;
+    description : Text;
+    orderType : Text;
+    status : Text;
+    imageUrl : ?Text;
+    createdAt : Int;
+  };
+
   // User Profile type for AccessControl integration
   public type UserProfile = {
     userId : Nat;
@@ -124,21 +163,6 @@ actor {
     mobile : MobileNumber;
     role : UserRole;
   };
-
-  // Persistent State
-  let users = Map.empty<MobileNumber, User>();
-  let userIdToPrincipal = Map.empty<Nat, Principal>();
-  let principalToUserId = Map.empty<Principal, Nat>();
-  let userProfiles = Map.empty<Principal, UserProfile>();
-  let providerProfiles = Map.empty<Nat, ProviderProfile>();
-  let toggles = Map.empty<Text, Bool>();
-  let banners = Map.empty<Nat, Banner>();
-  var nextUserId = 1;
-  var nextBannerId = 1;
-
-  var adminConfig : ?AdminConfig = null;
-  var subscriptionPricing : ?SubscriptionPricing = null;
-  var adminPinHash : Text = "1234";
 
   func getUserByIdInternal(userId : Nat) : ?User {
     for ((mobile, user) in users.entries()) {
@@ -154,6 +178,44 @@ actor {
       case (?callerUserId) { callerUserId == userId };
       case null { false };
     };
+  };
+
+  // New function to set provider plan type
+  public shared ({ caller }) func setPlanType(userId : Nat, planType : PlanType) : async () {
+    if (not isProviderOwner(caller, userId) and not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only the provider owner or admin can update plan type");
+    };
+    switch (providerProfiles.get(userId)) {
+      case (null) { Runtime.trap("Provider profile not found") };
+      case (?profile) {
+        let updatedProfile : ProviderProfile = {
+          userId = profile.userId;
+          shopName = profile.shopName;
+          description = profile.description;
+          address = profile.address;
+          category = profile.category;
+          serviceRates = profile.serviceRates;
+          subscriptionStatus = profile.subscriptionStatus;
+          subscriptionPlan = profile.subscriptionPlan;
+          subscriptionExpiry = profile.subscriptionExpiry;
+          paymentScreenshotBlobId = profile.paymentScreenshotBlobId;
+          approvalStatus = profile.approvalStatus;
+          upiId = profile.upiId;
+          qrCodeBlobId = profile.qrCodeBlobId;
+          photos = profile.photos;
+          planType;
+        };
+        providerProfiles.add(userId, updatedProfile);
+      };
+    };
+  };
+
+  // New function to get all providers data
+  public query ({ caller }) func getAllProviders() : async [ProviderProfile] {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can view all provider data");
+    };
+    providerProfiles.values().toArray();
   };
 
   // User Profile Functions (required by frontend)
@@ -231,7 +293,10 @@ actor {
         subscriptionExpiry = null;
         paymentScreenshotBlobId = null;
         approvalStatus = #pending;
+        upiId = "";
+        qrCodeBlobId = null;
         photos = [];
+        planType = #pending;
       };
       providerProfiles.add(user.id, providerProfile);
     };
@@ -362,7 +427,40 @@ actor {
           subscriptionExpiry = profile.subscriptionExpiry;
           paymentScreenshotBlobId = profile.paymentScreenshotBlobId;
           approvalStatus = profile.approvalStatus;
+          upiId = profile.upiId;
+          qrCodeBlobId = profile.qrCodeBlobId;
           photos = profile.photos;
+          planType = profile.planType;
+        };
+        providerProfiles.add(userId, updatedProfile);
+      };
+    };
+  };
+
+  /// Extended updateProviderProfile to include upiId and qrCodeBlobId
+  public shared ({ caller }) func updateProviderProfileFull(userId : Nat, shopName : Text, description : Text, address : Text, category : Text, upiId : Text, qrCodeBlobId : ?Text) : async () {
+    if (not isProviderOwner(caller, userId) and not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only the provider owner or admin can update this profile");
+    };
+    switch (providerProfiles.get(userId)) {
+      case (null) { Runtime.trap("Provider profile not found") };
+      case (?profile) {
+        let updatedProfile : ProviderProfile = {
+          userId = profile.userId;
+          shopName;
+          description;
+          address;
+          category;
+          serviceRates = profile.serviceRates;
+          subscriptionStatus = profile.subscriptionStatus;
+          subscriptionPlan = profile.subscriptionPlan;
+          subscriptionExpiry = profile.subscriptionExpiry;
+          paymentScreenshotBlobId = profile.paymentScreenshotBlobId;
+          approvalStatus = profile.approvalStatus;
+          upiId;
+          qrCodeBlobId;
+          photos = profile.photos;
+          planType = profile.planType;
         };
         providerProfiles.add(userId, updatedProfile);
       };
@@ -388,7 +486,10 @@ actor {
           subscriptionExpiry = profile.subscriptionExpiry;
           paymentScreenshotBlobId = profile.paymentScreenshotBlobId;
           approvalStatus = profile.approvalStatus;
+          upiId = profile.upiId;
+          qrCodeBlobId = profile.qrCodeBlobId;
           photos = profile.photos;
+          planType = profile.planType;
         };
         providerProfiles.add(userId, updatedProfile);
       };
@@ -417,7 +518,10 @@ actor {
           subscriptionExpiry = profile.subscriptionExpiry;
           paymentScreenshotBlobId = profile.paymentScreenshotBlobId;
           approvalStatus = profile.approvalStatus;
+          upiId = profile.upiId;
+          qrCodeBlobId = profile.qrCodeBlobId;
           photos = profile.photos;
+          planType = profile.planType;
         };
         providerProfiles.add(userId, updatedProfile);
       };
@@ -443,7 +547,10 @@ actor {
           subscriptionExpiry = profile.subscriptionExpiry;
           paymentScreenshotBlobId = ?blobId;
           approvalStatus = #pending;
+          upiId = profile.upiId;
+          qrCodeBlobId = profile.qrCodeBlobId;
           photos = profile.photos;
+          planType = profile.planType;
         };
         providerProfiles.add(userId, updatedProfile);
       };
@@ -469,7 +576,10 @@ actor {
           subscriptionExpiry = profile.subscriptionExpiry;
           paymentScreenshotBlobId = profile.paymentScreenshotBlobId;
           approvalStatus = profile.approvalStatus;
+          upiId = profile.upiId;
+          qrCodeBlobId = profile.qrCodeBlobId;
           photos = [blobId].concat(profile.photos);
+          planType = profile.planType;
         };
         providerProfiles.add(userId, updatedProfile);
       };
@@ -498,7 +608,10 @@ actor {
           subscriptionExpiry = profile.subscriptionExpiry;
           paymentScreenshotBlobId = profile.paymentScreenshotBlobId;
           approvalStatus = profile.approvalStatus;
+          upiId = profile.upiId;
+          qrCodeBlobId = profile.qrCodeBlobId;
           photos = filteredPhotos;
+          planType = profile.planType;
         };
         providerProfiles.add(userId, updatedProfile);
       };
@@ -589,8 +702,11 @@ actor {
           subscriptionPlan = plan;
           subscriptionExpiry = expiry;
           paymentScreenshotBlobId = profile.paymentScreenshotBlobId;
-          approvalStatus = #approved;
+          approvalStatus = profile.approvalStatus;
+          upiId = profile.upiId;
+          qrCodeBlobId = profile.qrCodeBlobId;
           photos = profile.photos;
+          planType = profile.planType;
         };
         providerProfiles.add(userId, updatedProfile);
       };
@@ -615,8 +731,11 @@ actor {
           subscriptionPlan = profile.subscriptionPlan;
           subscriptionExpiry = profile.subscriptionExpiry;
           paymentScreenshotBlobId = profile.paymentScreenshotBlobId;
-          approvalStatus = #rejected;
+          approvalStatus = profile.approvalStatus;
+          upiId = profile.upiId;
+          qrCodeBlobId = profile.qrCodeBlobId;
           photos = profile.photos;
+          planType = profile.planType;
         };
         providerProfiles.add(userId, updatedProfile);
       };
@@ -735,5 +854,119 @@ actor {
           Runtime.trap("Unauthorized: Only admins can perform this action");
       };
       UserApproval.listApprovals(approvalState);
+  };
+
+  // Order Functions
+  public shared ({ caller }) func placeOrder(providerId : Nat, customerName : Text, description : Text, orderType : Text, imageUrl : ?Text) : async Nat {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only registered users can place orders");
+    };
+    switch (principalToUserId.get(caller)) {
+      case (null) { Runtime.trap("User not registered") };
+      case (?customerId) {
+        let newOrder : Order = {
+          id = nextOrderId;
+          customerId;
+          providerId;
+          customerName;
+          description;
+          orderType;
+          status = "pending";
+          imageUrl;
+          createdAt = Time.now();
+        };
+        orders.add(nextOrderId, newOrder);
+
+        nextOrderId += 1;
+
+        newOrder.id;
+      };
+    };
+  };
+
+  public query ({ caller }) func getProviderOrders(userId : Nat) : async [Order] {
+    if (not isProviderOwner(caller, userId) and not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only the provider owner or admin can view orders");
+    };
+    orders.values().toArray().filter(
+      func(order : Order) : Bool { order.providerId == userId }
+    );
+  };
+
+  public query ({ caller }) func getCustomerOrders(userId : Nat) : async [Order] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only registered users can view orders");
+    };
+    switch (principalToUserId.get(caller)) {
+      case (?customerId) {
+        if (customerId == userId or AccessControl.isAdmin(accessControlState, caller)) {
+          orders.values().toArray().filter(
+            func(order : Order) : Bool { order.customerId == userId }
+          );
+        } else {
+          Runtime.trap("Unauthorized: Can only view your own orders");
+        };
+      };
+      case (null) { Runtime.trap("User not registered") };
+    };
+  };
+
+  public shared ({ caller }) func updateOrderStatus(orderId : Nat, status : Text) : async () {
+    switch (orders.get(orderId)) {
+      case (null) { Runtime.trap("Order not found") };
+      case (?order) {
+        if (not isProviderOwner(caller, order.providerId) and not AccessControl.isAdmin(accessControlState, caller)) {
+          Runtime.trap("Unauthorized: Only the provider or admin can update order status");
+        };
+        let updatedOrder : Order = {
+          id = order.id;
+          customerId = order.customerId;
+          providerId = order.providerId;
+          customerName = order.customerName;
+          description = order.description;
+          orderType = order.orderType;
+          status;
+          imageUrl = order.imageUrl;
+          createdAt = order.createdAt;
+        };
+        orders.add(orderId, updatedOrder);
+      };
+    };
+  };
+
+  public query ({ caller }) func getOrderById(orderId : Nat) : async ?Order {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only registered users can view orders");
+    };
+    switch (orders.get(orderId)) {
+      case (null) { Runtime.trap("Order not found") };
+      case (?order) {
+        switch (principalToUserId.get(caller)) {
+          case (null) { Runtime.trap("User not registered") };
+          case (?userId) {
+            if (
+              order.customerId == userId or
+              order.providerId == userId or
+              AccessControl.isAdmin(accessControlState, caller)
+            ) {
+              ?order;
+            } else {
+              Runtime.trap("Unauthorized: Can only view your own orders");
+            };
+          };
+        };
+      };
+    };
+  };
+
+  public query ({ caller }) func getOrdersByStatus(userId : Nat, status : Text) : async [Order] {
+    if (not isProviderOwner(caller, userId) and not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only the provider owner or admin can view orders by status");
+    };
+    orders.values().toArray().filter(
+      func(order : Order) : Bool {
+        order.providerId == userId and order.status == status
+      }
+    );
   };
 };

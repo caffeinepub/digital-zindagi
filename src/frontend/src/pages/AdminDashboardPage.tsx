@@ -11,6 +11,7 @@ import {
   LogOut,
   MessageCircle,
   Palette,
+  Pencil,
   Plus,
   Search,
   Send,
@@ -28,12 +29,13 @@ import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ExternalBlob, type SubscriptionPlan } from "../backend";
-import type { Banner } from "../backend";
+import type { Banner, ProviderProfile, User } from "../backend";
 import { hashPassword, useAuth } from "../contexts/AuthContext";
 import { useActor } from "../hooks/useActor";
 import {
   useActiveBanners,
   useAdminConfig,
+  useAllProviders,
   useAllToggles,
   useApproveProvider,
   useProvidersPendingApproval,
@@ -77,47 +79,270 @@ function SaveConfirmation({ show }: { show: boolean }) {
   );
 }
 
+// ---- Provider Quick Action Modal ----
+interface ProviderQuickActionModalProps {
+  user: User;
+  profile?: ProviderProfile;
+  onClose: () => void;
+}
+
+function ProviderQuickActionModal({
+  user,
+  profile,
+  onClose,
+}: ProviderQuickActionModalProps) {
+  const approveM = useApproveProvider();
+  const rejectM = useRejectProvider();
+
+  const handleApprove = async () => {
+    await approveM.mutateAsync({
+      userId: user.id,
+      plan: "oneMonth" as SubscriptionPlan,
+    });
+    toast.success(`${user.name} ko approve kar diya!`);
+    onClose();
+  };
+
+  const handleReject = async () => {
+    await rejectM.mutateAsync(user.id);
+    toast.success(`${user.name} ko reject kar diya.`);
+    onClose();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      data-ocid="admin.modal"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onClose();
+      }}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.92, y: 12 }}
+        transition={{ duration: 0.2 }}
+        className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden"
+      >
+        {/* Header */}
+        <div className="bg-emerald-header text-white px-5 py-4 flex items-center justify-between">
+          <div>
+            <p className="font-heading font-bold text-lg">{user.name}</p>
+            <p className="text-white/70 text-sm">{user.mobile}</p>
+          </div>
+          <button
+            type="button"
+            data-ocid="admin.close_button"
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+          >
+            <XCircle size={16} />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Profile Info */}
+          {profile && (
+            <div className="bg-muted rounded-xl px-4 py-3 space-y-1">
+              {profile.shopName && (
+                <p className="text-sm font-semibold text-foreground">
+                  🏪 {profile.shopName}
+                </p>
+              )}
+              {profile.category && (
+                <p className="text-xs text-muted-foreground">
+                  Category: {profile.category}
+                </p>
+              )}
+              <span
+                className={`inline-block text-xs font-bold px-2 py-0.5 rounded-full ${
+                  profile.planType === "premium"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-gray-100 text-gray-600"
+                }`}
+              >
+                {profile.planType === "premium" ? "⭐ Premium" : "🆓 Free"}
+              </span>
+            </div>
+          )}
+
+          {/* Payment Screenshot */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              Payment Screenshot
+            </p>
+            {profile?.paymentScreenshotBlobId ? (
+              <img
+                src={profile.paymentScreenshotBlobId}
+                alt="Payment Screenshot"
+                className="w-40 h-40 object-contain border border-border rounded-xl mx-auto block"
+              />
+            ) : (
+              <div className="w-full h-24 bg-muted rounded-xl flex items-center justify-center">
+                <p className="text-xs text-muted-foreground text-center px-4">
+                  📷 Payment screenshot nahi hai
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              data-ocid="admin.confirm_button"
+              onClick={handleApprove}
+              disabled={approveM.isPending || rejectM.isPending}
+              className="flex-1 flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 disabled:opacity-60 text-white font-bold py-2.5 rounded-xl transition-colors text-sm"
+            >
+              {approveM.isPending ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <CheckCircle size={14} />
+              )}
+              Approve
+            </button>
+            <button
+              type="button"
+              data-ocid="admin.delete_button"
+              onClick={handleReject}
+              disabled={approveM.isPending || rejectM.isPending}
+              className="flex-1 flex items-center justify-center gap-2 border-2 border-red-300 text-red-600 hover:bg-red-50 disabled:opacity-60 font-bold py-2.5 rounded-xl transition-colors text-sm"
+            >
+              {rejectM.isPending ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <XCircle size={14} />
+              )}
+              Reject
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // ---- User Management Section ----
+type UserMgmtTab =
+  | "recent"
+  | "customers"
+  | "providers"
+  | "nayeProviders"
+  | "puraneProviders";
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
 function UserManagement() {
-  const [activeTab, setActiveTab] = useState<
-    "recent" | "customers" | "providers"
-  >("recent");
+  const [activeTab, setActiveTab] = useState<UserMgmtTab>("recent");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState<bigint | null>(null);
+
   const { data: recentUsers, isLoading: r } = useRecentUsers();
   const { data: customers, isLoading: c } = useUsersByRole("customer");
   const { data: providers, isLoading: p } = useUsersByRole("provider");
+  const { data: allProviders } = useAllProviders();
 
-  const users =
-    activeTab === "recent"
-      ? (recentUsers ?? [])
-      : activeTab === "customers"
-        ? (customers ?? [])
-        : (providers ?? []);
+  const isProviderTab =
+    activeTab === "providers" ||
+    activeTab === "nayeProviders" ||
+    activeTab === "puraneProviders";
+
+  const baseUsers = (() => {
+    switch (activeTab) {
+      case "recent":
+        return recentUsers ?? [];
+      case "customers":
+        return customers ?? [];
+      case "providers":
+        return providers ?? [];
+      case "nayeProviders": {
+        const now = Date.now();
+        return (providers ?? []).filter(
+          (u) => now - Number(u.createdAt) <= SEVEN_DAYS_MS,
+        );
+      }
+      case "puraneProviders": {
+        const now = Date.now();
+        return (providers ?? []).filter(
+          (u) => now - Number(u.createdAt) > THIRTY_DAYS_MS,
+        );
+      }
+      default:
+        return [];
+    }
+  })();
+
   const loading =
     activeTab === "recent" ? r : activeTab === "customers" ? c : p;
 
+  // Client-side search filter
+  const users = searchQuery.trim()
+    ? baseUsers.filter(
+        (u) =>
+          u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          u.mobile.toLowerCase().includes(searchQuery.toLowerCase()),
+      )
+    : baseUsers;
+
+  const selectedUser =
+    selectedUserId != null
+      ? (users.find((u) => u.id === selectedUserId) ?? null)
+      : null;
+  const selectedProfile =
+    selectedUserId != null
+      ? (allProviders ?? []).find((p) => p.userId === selectedUserId)
+      : undefined;
+
+  const TAB_CONFIG: { key: UserMgmtTab; label: string }[] = [
+    { key: "recent", label: "Naye Users (48h)" },
+    { key: "customers", label: "All Customers" },
+    { key: "providers", label: "All Providers" },
+    { key: "nayeProviders", label: "Naye Providers (7d)" },
+    { key: "puraneProviders", label: "Purane Providers (30d+)" },
+  ];
+
   return (
     <div className="space-y-4">
+      {/* Search Bar */}
+      <div className="relative">
+        <Search
+          size={16}
+          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+        />
+        <input
+          data-ocid="admin.search_input"
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Naam ya Mobile Number se search karein..."
+          className="w-full border border-border rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring bg-white"
+        />
+      </div>
+
+      {/* Tabs */}
       <div className="flex gap-1 bg-muted rounded-xl p-1 overflow-x-auto">
-        {(["recent", "customers", "providers"] as const).map((t) => (
+        {TAB_CONFIG.map((t) => (
           <button
-            key={t}
+            key={t.key}
             type="button"
             data-ocid="admin.tab"
-            onClick={() => setActiveTab(t)}
-            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-              activeTab === t
+            onClick={() => setActiveTab(t.key)}
+            className={`flex-shrink-0 py-2 px-3 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+              activeTab === t.key
                 ? "bg-white text-foreground shadow-xs"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {t === "recent"
-              ? "Naye Users (48h)"
-              : t === "customers"
-                ? "All Customers"
-                : "All Providers"}
+            {t.label}
           </button>
         ))}
       </div>
+
       {loading ? (
         <div
           data-ocid="admin.loading_state"
@@ -133,8 +358,11 @@ function UserManagement() {
                 <th className="text-left px-4 py-3 font-semibold text-foreground">
                   Naam
                 </th>
-                <th className="text-left px-4 py-3 font-semibold text-foreground hidden sm:table-cell">
+                <th className="text-left px-4 py-3 font-semibold text-foreground">
                   Mobile
+                </th>
+                <th className="text-left px-4 py-3 font-semibold text-foreground hidden sm:table-cell">
+                  Reg. Date
                 </th>
                 <th className="text-left px-4 py-3 font-semibold text-foreground hidden md:table-cell">
                   Role
@@ -148,9 +376,29 @@ function UserManagement() {
                   data-ocid={`admin.row.${i + 1}`}
                   className="border-t border-border hover:bg-muted/50"
                 >
-                  <td className="px-4 py-3 font-medium">{u.name}</td>
-                  <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">
+                  <td className="px-4 py-3 font-medium">
+                    {isProviderTab ? (
+                      <button
+                        type="button"
+                        data-ocid={`admin.button.${i + 1}`}
+                        onClick={() =>
+                          setSelectedUserId(
+                            selectedUserId === u.id ? null : u.id,
+                          )
+                        }
+                        className="text-primary underline-offset-2 hover:underline font-semibold text-left"
+                      >
+                        {u.name}
+                      </button>
+                    ) : (
+                      u.name
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
                     {u.mobile}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell text-xs">
+                    {new Date(Number(u.createdAt)).toLocaleDateString("en-IN")}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
                     <span className="capitalize text-xs">{u.role}</span>
@@ -164,10 +412,21 @@ function UserManagement() {
               data-ocid="admin.empty_state"
               className="text-center py-8 text-muted-foreground"
             >
-              Koi user nahi mila
+              {searchQuery.trim()
+                ? "Koi user search results mein nahi mila"
+                : "Koi user nahi mila"}
             </div>
           )}
         </div>
+      )}
+
+      {/* Provider Quick Action Modal */}
+      {selectedUser && isProviderTab && (
+        <ProviderQuickActionModal
+          user={selectedUser}
+          profile={selectedProfile}
+          onClose={() => setSelectedUserId(null)}
+        />
       )}
     </div>
   );
@@ -176,18 +435,35 @@ function UserManagement() {
 // ---- Global Search Section ----
 function GlobalSearch() {
   const [text, setText] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState<bigint | null>(null);
   const { data: users, isLoading } = useSearchUsers(text);
+  const { data: allProviders } = useAllProviders();
+
+  const selectedUser =
+    selectedUserId != null
+      ? ((users ?? []).find((u) => u.id === selectedUserId) ?? null)
+      : null;
+  const selectedProfile =
+    selectedUserId != null
+      ? (allProviders ?? []).find((p) => p.userId === selectedUserId)
+      : undefined;
 
   return (
     <div className="space-y-4">
-      <input
-        data-ocid="admin.search_input"
-        type="text"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Naam ya mobile se search karein..."
-        className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-      />
+      <div className="relative">
+        <Search
+          size={16}
+          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+        />
+        <input
+          data-ocid="admin.search_input"
+          type="text"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Naam ya mobile se search karein..."
+          className="w-full border border-border rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+        />
+      </div>
       {isLoading && (
         <div
           data-ocid="admin.loading_state"
@@ -202,8 +478,9 @@ function GlobalSearch() {
             <thead className="bg-muted">
               <tr>
                 <th className="text-left px-4 py-3 font-semibold">Naam</th>
+                <th className="text-left px-4 py-3 font-semibold">Mobile</th>
                 <th className="text-left px-4 py-3 font-semibold hidden sm:table-cell">
-                  Mobile
+                  Reg. Date
                 </th>
                 <th className="text-left px-4 py-3 font-semibold hidden md:table-cell">
                   Role
@@ -217,9 +494,29 @@ function GlobalSearch() {
                   data-ocid={`admin.row.${i + 1}`}
                   className="border-t border-border hover:bg-muted/50"
                 >
-                  <td className="px-4 py-3 font-medium">{u.name}</td>
-                  <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">
+                  <td className="px-4 py-3 font-medium">
+                    {String(u.role).toLowerCase() === "provider" ? (
+                      <button
+                        type="button"
+                        data-ocid={`admin.button.${i + 1}`}
+                        onClick={() =>
+                          setSelectedUserId(
+                            selectedUserId === u.id ? null : u.id,
+                          )
+                        }
+                        className="text-primary underline-offset-2 hover:underline font-semibold text-left"
+                      >
+                        {u.name}
+                      </button>
+                    ) : (
+                      u.name
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
                     {u.mobile}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell text-xs">
+                    {new Date(Number(u.createdAt)).toLocaleDateString("en-IN")}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
                     <span className="capitalize text-xs">{u.role}</span>
@@ -238,6 +535,16 @@ function GlobalSearch() {
           Koi result nahi mila
         </div>
       )}
+
+      {/* Provider Quick Action Modal for search results */}
+      {selectedUser &&
+        String(selectedUser.role).toLowerCase() === "provider" && (
+          <ProviderQuickActionModal
+            user={selectedUser}
+            profile={selectedProfile}
+            onClose={() => setSelectedUserId(null)}
+          />
+        )}
     </div>
   );
 }
@@ -381,9 +688,21 @@ function ProviderApprovals() {
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="font-semibold text-foreground">
-                    {p.shopName || "Shop Name Set Nahi"}
-                  </h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-semibold text-foreground">
+                      {p.shopName || "Shop Name Set Nahi"}
+                    </h3>
+                    {p.planType === "premium" && (
+                      <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full font-semibold">
+                        Premium ⭐
+                      </span>
+                    )}
+                    {p.planType === "free" && (
+                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-semibold">
+                        Free
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-muted-foreground">{p.category}</p>
                   <p className="text-xs text-muted-foreground mt-1">
                     ID: {p.userId.toString()}
@@ -981,8 +1300,20 @@ function CategoryManagerSection() {
   const [showSaved, setShowSaved] = useState(false);
   const [triggerSaveAll, setTriggerSaveAll] = useState(0);
 
-  // Build merged category list: defaults + user-added
-  const allCategories = (() => {
+  // Build merged category list: defaults + user-added (state-driven for edit/remove)
+  const buildInitialCategories = () => {
+    // Try loading from dz_categories_list first (persisted list with edits/removes)
+    try {
+      const stored = localStorage.getItem("dz_categories_list");
+      if (stored) {
+        return JSON.parse(stored) as {
+          name: string;
+          hinglish: string;
+          emoji: string;
+        }[];
+      }
+    } catch {}
+    // Fallback: defaults + approved extras
     const extra: { name: string; hinglish: string; emoji: string }[] = (() => {
       try {
         const stored = JSON.parse(
@@ -1003,7 +1334,43 @@ function CategoryManagerSection() {
       }
     })();
     return [...DEFAULT_CATEGORIES, ...extra];
-  })();
+  };
+
+  const [categories, setCategories] = useState<
+    { name: string; hinglish: string; emoji: string }[]
+  >(buildInitialCategories);
+
+  const persistCategories = (
+    cats: { name: string; hinglish: string; emoji: string }[],
+  ) => {
+    localStorage.setItem("dz_categories_list", JSON.stringify(cats));
+  };
+
+  const handleRemoveCategory = (catName: string) => {
+    setCategories((prev) => {
+      const updated = prev.filter((c) => c.name !== catName);
+      persistCategories(updated);
+      return updated;
+    });
+    toast.success(`"${catName}" category remove ho gayi!`);
+  };
+
+  const handleEditCategory = (
+    oldName: string,
+    newName: string,
+    newEmoji: string,
+  ) => {
+    setCategories((prev) => {
+      const updated = prev.map((c) =>
+        c.name === oldName
+          ? { ...c, name: newName, hinglish: newName, emoji: newEmoji }
+          : c,
+      );
+      persistCategories(updated);
+      return updated;
+    });
+    toast.success("Category update ho gayi!");
+  };
 
   // Get toggle value for a category (from backend or localStorage)
   const getToggleValue = (name: string): boolean => {
@@ -1052,6 +1419,17 @@ function CategoryManagerSection() {
       status: "approved",
     });
     localStorage.setItem("dz_approved_categories", JSON.stringify(cats));
+    // Also update the categories state
+    setCategories((prev) => {
+      const newCat = {
+        name: newCatName.trim(),
+        hinglish: newCatName.trim(),
+        emoji: newCatIcon,
+      };
+      const updated = [...prev, newCat];
+      persistCategories(updated);
+      return updated;
+    });
     setShowSaved(true);
     toast.success(`Category "${newCatName}" add ho gayi!`);
     setTimeout(() => setShowSaved(false), 3000);
@@ -1140,7 +1518,7 @@ function CategoryManagerSection() {
             "Save" dabayein.
           </p>
         </div>
-        {allCategories.length === 0 ? (
+        {categories.length === 0 ? (
           <div
             data-ocid="admin.empty_state"
             className="text-center py-12 text-muted-foreground"
@@ -1148,7 +1526,7 @@ function CategoryManagerSection() {
             Koi category nahi mila
           </div>
         ) : (
-          allCategories.map((cat, i) => (
+          categories.map((cat, i) => (
             <CategoryRow
               key={cat.name}
               index={i}
@@ -1184,6 +1562,10 @@ function CategoryManagerSection() {
                 if (!isManager)
                   updateToggle.mutate({ name: cat.name, value: val });
               }}
+              onRemove={() => handleRemoveCategory(cat.name)}
+              onEditNameEmoji={(newName, newEmoji) =>
+                handleEditCategory(cat.name, newName, newEmoji)
+              }
             />
           ))
         )}
@@ -1214,6 +1596,7 @@ interface CategoryRowData {
   m12: string;
   adMob: boolean;
   isOn: boolean;
+  adInterval: string; // Ad interval in minutes, default "5"
 }
 
 interface CategoryRowProps {
@@ -1225,6 +1608,8 @@ interface CategoryRowProps {
   triggerSaveAll: number;
   onSave: (data: CategoryRowData) => void;
   onToggle: (val: boolean) => void;
+  onRemove?: () => void;
+  onEditNameEmoji?: (newName: string, newEmoji: string) => void;
 }
 
 function CategoryRow({
@@ -1236,6 +1621,8 @@ function CategoryRow({
   triggerSaveAll,
   onSave,
   onToggle,
+  onRemove,
+  onEditNameEmoji,
 }: CategoryRowProps) {
   const storageKey = `dz_cat_row_${name}`;
 
@@ -1249,9 +1636,18 @@ function CategoryRow({
         m12: d.m12 ?? "",
         adMob: d.adMob ?? false,
         isOn: d.isOn ?? isOn,
+        adInterval: d.adInterval ?? "5",
       };
     } catch {
-      return { m1: "", m2: "", m6: "", m12: "", adMob: false, isOn };
+      return {
+        m1: "",
+        m2: "",
+        m6: "",
+        m12: "",
+        adMob: false,
+        isOn,
+        adInterval: "5",
+      };
     }
   };
 
@@ -1262,18 +1658,62 @@ function CategoryRow({
   const [m12, setM12] = useState(initial.m12);
   const [adMob, setAdMob] = useState(initial.adMob);
   const [localOn, setLocalOn] = useState(initial.isOn);
+  const [adInterval, setAdInterval] = useState(initial.adInterval);
+
+  // Edit mode state
+  const [editMode, setEditMode] = useState(false);
+  const [editName, setEditName] = useState(name);
+  const [editEmoji, setEditEmoji] = useState(emoji);
 
   const handleSave = () => {
-    const data: CategoryRowData = { m1, m2, m6, m12, adMob, isOn: localOn };
+    const data: CategoryRowData = {
+      m1,
+      m2,
+      m6,
+      m12,
+      adMob,
+      isOn: localOn,
+      adInterval: adInterval || "5",
+    };
     localStorage.setItem(storageKey, JSON.stringify(data));
     onSave(data);
+  };
+
+  const handleConfirmEdit = () => {
+    if (!editName.trim()) return;
+    onEditNameEmoji?.(editName.trim(), editEmoji);
+    setEditMode(false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditName(name);
+    setEditEmoji(emoji);
+    setEditMode(false);
+  };
+
+  const handleRemoveClick = () => {
+    if (
+      window.confirm(
+        `"${name}" category delete karein? Yeh action undo nahi hoga.`,
+      )
+    ) {
+      onRemove?.();
+    }
   };
 
   // Listen to global Save All trigger
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — only re-runs on triggerSaveAll change
   useEffect(() => {
     if (triggerSaveAll > 0) {
-      const data: CategoryRowData = { m1, m2, m6, m12, adMob, isOn: localOn };
+      const data: CategoryRowData = {
+        m1,
+        m2,
+        m6,
+        m12,
+        adMob,
+        isOn: localOn,
+        adInterval: adInterval || "5",
+      };
       localStorage.setItem(storageKey, JSON.stringify(data));
       onSave(data);
     }
@@ -1284,12 +1724,78 @@ function CategoryRow({
       data-ocid={`admin.item.${index + 1}`}
       className="border-b border-border last:border-0 px-5 py-4 space-y-3"
     >
-      {/* Row Header: Name + ON/OFF */}
+      {/* Row Header: Name + Edit/Remove + ON/OFF */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xl">{emoji}</span>
-          <span className="font-semibold text-foreground text-sm">{name}</span>
-        </div>
+        {editMode ? (
+          /* Inline Edit Form */
+          <div className="flex items-center gap-2 flex-1">
+            <EmojiPicker value={editEmoji} onChange={setEditEmoji} />
+            <input
+              data-ocid="admin.input"
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              placeholder="Category naam"
+              className="flex-1 border border-emerald-400 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-emerald-400 min-w-0"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleConfirmEdit();
+                if (e.key === "Escape") handleCancelEdit();
+              }}
+            />
+            <button
+              type="button"
+              data-ocid="admin.save_button"
+              onClick={handleConfirmEdit}
+              className="w-7 h-7 flex items-center justify-center rounded-lg bg-green-500 text-white hover:bg-green-600 transition-colors text-xs font-bold flex-shrink-0"
+              title="Confirm"
+            >
+              ✓
+            </button>
+            <button
+              type="button"
+              data-ocid="admin.cancel_button"
+              onClick={handleCancelEdit}
+              className="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-200 text-gray-600 hover:bg-gray-300 transition-colors text-xs font-bold flex-shrink-0"
+              title="Cancel"
+            >
+              ✗
+            </button>
+          </div>
+        ) : (
+          /* Normal Name Display */
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="text-xl flex-shrink-0">{emoji}</span>
+            <span className="font-semibold text-foreground text-sm truncate">
+              {name}
+            </span>
+            {!isManager && (
+              <div className="flex items-center gap-1 ml-1 flex-shrink-0">
+                <button
+                  type="button"
+                  data-ocid="admin.edit_button"
+                  onClick={() => {
+                    setEditName(name);
+                    setEditEmoji(emoji);
+                    setEditMode(true);
+                  }}
+                  className="w-6 h-6 flex items-center justify-center rounded-md text-blue-500 hover:bg-blue-50 transition-colors"
+                  title="Edit karo"
+                >
+                  <Pencil size={12} />
+                </button>
+                <button
+                  type="button"
+                  data-ocid="admin.delete_button"
+                  onClick={handleRemoveClick}
+                  className="w-6 h-6 flex items-center justify-center rounded-md text-red-400 hover:bg-red-50 transition-colors"
+                  title="Remove karo"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         <button
           type="button"
           data-ocid={`admin.toggle.${index + 1}`}
@@ -1299,7 +1805,7 @@ function CategoryRow({
             onToggle(next);
           }}
           disabled={isManager}
-          className={`flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg transition-all ${
+          className={`flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg transition-all flex-shrink-0 ${
             localOn
               ? "bg-green-100 text-green-700 hover:bg-green-200"
               : "bg-gray-100 text-gray-500 hover:bg-gray-200"
@@ -1336,32 +1842,51 @@ function CategoryRow({
         </div>
       )}
 
-      {/* AdMob Toggle + Save Button */}
+      {/* AdMob Toggle + Ad Interval + Save Button */}
       {!isManager && (
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground font-medium">
-              AdMob Ads:
-            </span>
-            <button
-              type="button"
-              data-ocid={`admin.toggle.${index + 1}`}
-              onClick={() => setAdMob((v) => !v)}
-              className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg transition-all ${
-                adMob
-                  ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
-                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-              }`}
-            >
-              {adMob ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
-              {adMob ? "ON" : "OFF"}
-            </button>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground font-medium">
+                AdMob Ads:
+              </span>
+              <button
+                type="button"
+                data-ocid={`admin.toggle.${index + 1}`}
+                onClick={() => setAdMob((v) => !v)}
+                className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg transition-all ${
+                  adMob
+                    ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                }`}
+              >
+                {adMob ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+                {adMob ? "ON" : "OFF"}
+              </button>
+            </div>
+            {/* Ad Interval input — only visible when AdMob is ON */}
+            {adMob && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground font-medium whitespace-nowrap">
+                  Ad Interval (Min):
+                </span>
+                <input
+                  data-ocid="admin.input"
+                  type="number"
+                  min={1}
+                  value={adInterval}
+                  onChange={(e) => setAdInterval(e.target.value)}
+                  placeholder="5"
+                  className="w-16 border border-border rounded-lg px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-ring text-center"
+                />
+              </div>
+            )}
           </div>
           <button
             type="button"
             data-ocid="admin.save_button"
             onClick={handleSave}
-            className="flex items-center gap-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-bold px-4 py-1.5 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-bold px-4 py-1.5 rounded-lg transition-colors flex-shrink-0"
           >
             <CheckCircle size={13} />
             Save Changes
@@ -2424,15 +2949,18 @@ export default function AdminDashboardPage() {
     ? ALL_NAV_ITEMS.filter((n) => n.managerVisible)
     : ALL_NAV_ITEMS;
 
+  const searchParams = new URLSearchParams(window.location.search);
+  const initialSection =
+    (searchParams.get("section") as AdminSection) || "categoryManager";
   const [section, setSection] = useState<AdminSection>(
-    isManager ? "approvals" : "founder",
+    isManager ? "approvals" : initialSection,
   );
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const navigate = useNavigate();
 
   const handleLogout = () => {
     sessionStorage.removeItem("adminVerified");
-    navigate("/admin/pin");
+    navigate("/login");
   };
 
   const currentNav = ALL_NAV_ITEMS.find((n) => n.key === section);

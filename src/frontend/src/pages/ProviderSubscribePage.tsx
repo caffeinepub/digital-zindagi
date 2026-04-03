@@ -1,4 +1,4 @@
-import { CheckCircle, Loader2, Upload } from "lucide-react";
+import { CheckCircle, Crown, Loader2, Upload } from "lucide-react";
 import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -65,6 +65,7 @@ export default function ProviderSubscribePage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [freeSubmitting, setFreeSubmitting] = useState(false);
 
   const { user } = useAuth();
   const { actor } = useActor();
@@ -72,6 +73,12 @@ export default function ProviderSubscribePage() {
   const { data: pricing } = useSubscriptionPricing();
   const params = useParams() as { category?: string };
   const catName = params.category;
+
+  // Determine plan type from localStorage
+  const storedPlan = user
+    ? (localStorage.getItem(`dz_provider_plantype_${user.userId}`) ?? "premium")
+    : "premium";
+  const isPremiumPlan = storedPlan === "premium";
 
   // Read category-specific pricing from localStorage (set in Category Manager)
   const catRowData = useMemo(() => {
@@ -137,6 +144,20 @@ export default function ProviderSubscribePage() {
     }
   };
 
+  const handleFreeSubmit = async () => {
+    if (!actor || !user || !selectedPlan) return;
+    setFreeSubmitting(true);
+    try {
+      await actor.approveProvider(user.userId, SubscriptionPlan.oneMonth);
+      setSubmitted(true);
+      toast.success("Profile live ho gayi!");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Submit fail ho gaya");
+    } finally {
+      setFreeSubmitting(false);
+    }
+  };
+
   if (submitted) {
     return (
       <div className="min-h-screen bg-emerald-hero flex items-center justify-center p-4">
@@ -148,11 +169,14 @@ export default function ProviderSubscribePage() {
         >
           <CheckCircle size={56} className="text-green-500 mx-auto mb-4" />
           <h2 className="font-heading font-bold text-2xl text-foreground mb-2">
-            Payment Ho Gayi! Profile Live Ho Gayi!
+            {isPremiumPlan
+              ? "Payment Ho Gayi! Profile Live Ho Gayi!"
+              : "Profile Live Ho Gayi!"}
           </h2>
           <p className="text-muted-foreground text-sm mb-6">
-            Aapka payment ho gaya aur aapki profile automatically approve ho
-            gayi hai. Ab aap live hain!
+            {isPremiumPlan
+              ? "Aapka payment ho gaya aur aapki profile automatically approve ho gayi hai. Ab aap live hain!"
+              : "Aapki profile approve ho gayi hai. Ab aap listed hain!"}
           </p>
           <Link
             to="/provider/dashboard"
@@ -185,6 +209,21 @@ export default function ProviderSubscribePage() {
           {catName && (
             <p className="text-white/60 text-xs mt-1">Category: {catName}</p>
           )}
+          {/* Plan type indicator */}
+          <div className="mt-3 inline-flex items-center gap-1.5 bg-white/10 border border-white/20 rounded-full px-3 py-1">
+            {isPremiumPlan ? (
+              <>
+                <Crown size={13} className="text-yellow-300" />
+                <span className="text-xs text-white font-medium">
+                  Premium Plan (Ads free hoga)
+                </span>
+              </>
+            ) : (
+              <span className="text-xs text-white/80">
+                Free Plan selected hai
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -196,8 +235,8 @@ export default function ProviderSubscribePage() {
             </h2>
             {catRowData && (
               <p className="text-xs text-muted-foreground mb-6">
-                ℹ️ Is category ke liye special pricing set hai (Category Manager
-                se).
+                \u2139\ufe0f Is category ke liye special pricing set hai
+                (Category Manager se).
               </p>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -218,7 +257,7 @@ export default function ProviderSubscribePage() {
                   >
                     {plan === "twelveMonths" && (
                       <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-full">
-                        Best Value ⭐
+                        Best Value \u2b50
                       </span>
                     )}
                     <h3 className="font-heading font-bold text-lg text-foreground mb-0.5">
@@ -274,102 +313,147 @@ export default function ProviderSubscribePage() {
               &larr; Plan badlein ({PLAN_LABELS[selectedPlan]})
             </button>
 
-            <div className="bg-white rounded-2xl border border-border shadow-card p-6 space-y-6">
-              <h3 className="font-heading font-bold text-lg text-foreground">
-                Payment Details
-              </h3>
-
-              <div className="bg-accent rounded-xl p-4">
-                <p className="text-xs text-muted-foreground mb-1">
-                  Admin UPI ID:
-                </p>
-                <p className="font-bold text-foreground text-lg">
-                  {config?.upiId ?? "Abhi set nahi hua"}
-                </p>
-              </div>
-
-              {config?.qrCodeBlobId && (
-                <div className="text-center">
-                  <p className="text-sm text-muted-foreground mb-3">
-                    QR Code se bhi pay kar sakte hain:
-                  </p>
-                  <img
-                    src={config.qrCodeBlobId.getDirectURL()}
-                    alt="UPI QR Code"
-                    className="w-40 h-40 object-contain border border-border rounded-xl mx-auto"
-                  />
+            {isPremiumPlan ? (
+              /* === PREMIUM: QR + screenshot upload === */
+              <div className="bg-white rounded-2xl border border-border shadow-card p-6 space-y-6">
+                <div className="flex items-center gap-2">
+                  <Crown size={18} className="text-yellow-500" />
+                  <h3 className="font-heading font-bold text-lg text-foreground">
+                    Payment Details
+                  </h3>
                 </div>
-              )}
 
-              <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-                <p className="text-sm text-muted-foreground">Pay karna hai:</p>
-                <p className="text-3xl font-bold text-green-700">
-                  {getPlanPrice(selectedPlan)}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {PLAN_LABELS[selectedPlan]} ke liye
-                </p>
-              </div>
+                <div className="bg-accent rounded-xl p-4">
+                  <p className="text-xs text-muted-foreground mb-1">
+                    Admin UPI ID:
+                  </p>
+                  <p className="font-bold text-foreground text-lg">
+                    {config?.upiId ?? "Abhi set nahi hua"}
+                  </p>
+                </div>
 
-              <div>
-                <p className="text-sm font-medium text-foreground mb-2">
-                  Payment Screenshot Upload Karein
-                </p>
-                <label
-                  data-ocid="subscribe.upload_button"
-                  className="flex items-center gap-3 border-2 border-dashed border-border rounded-xl p-4 cursor-pointer hover:border-primary/50 hover:bg-accent/50 transition-all"
-                >
-                  <Upload size={20} className="text-muted-foreground" />
-                  <div className="text-sm">
-                    {screenshotFile ? (
-                      <span className="text-foreground font-medium">
-                        {screenshotFile.name}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">
-                        Screenshot chunein (JPG, PNG)
-                      </span>
-                    )}
-                  </div>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) =>
-                      setScreenshotFile(e.target.files?.[0] ?? null)
-                    }
-                  />
-                </label>
-              </div>
-
-              {uploading && (
-                <div data-ocid="subscribe.loading_state" className="space-y-1">
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Upload ho raha hai...</span>
-                    <span>{uploadProgress}%</span>
-                  </div>
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary rounded-full transition-all"
-                      style={{ width: `${uploadProgress}%` }}
+                {config?.qrCodeBlobId && (
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground mb-3">
+                      QR Code se bhi pay kar sakte hain:
+                    </p>
+                    <img
+                      src={config.qrCodeBlobId.getDirectURL()}
+                      alt="UPI QR Code"
+                      className="w-40 h-40 object-contain border border-border rounded-xl mx-auto"
                     />
                   </div>
-                </div>
-              )}
+                )}
 
-              <button
-                type="button"
-                data-ocid="subscribe.submit_button"
-                onClick={handleUpload}
-                disabled={!screenshotFile || uploading}
-                className="w-full bg-primary text-primary-foreground font-bold py-3 rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                {uploading && <Loader2 size={16} className="animate-spin" />}
-                {uploading
-                  ? "Upload Ho Raha Hai..."
-                  : "Screenshot Upload Karein"}
-              </button>
-            </div>
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Pay karna hai:
+                  </p>
+                  <p className="text-3xl font-bold text-green-700">
+                    {getPlanPrice(selectedPlan)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {PLAN_LABELS[selectedPlan]} ke liye
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm font-medium text-foreground mb-2">
+                    Payment Screenshot Upload Karein
+                  </p>
+                  <label
+                    data-ocid="subscribe.upload_button"
+                    className="flex items-center gap-3 border-2 border-dashed border-border rounded-xl p-4 cursor-pointer hover:border-primary/50 hover:bg-accent/50 transition-all"
+                  >
+                    <Upload size={20} className="text-muted-foreground" />
+                    <div className="text-sm">
+                      {screenshotFile ? (
+                        <span className="text-foreground font-medium">
+                          {screenshotFile.name}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          Screenshot chunein (JPG, PNG)
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) =>
+                        setScreenshotFile(e.target.files?.[0] ?? null)
+                      }
+                    />
+                  </label>
+                </div>
+
+                {uploading && (
+                  <div
+                    data-ocid="subscribe.loading_state"
+                    className="space-y-1"
+                  >
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Upload ho raha hai...</span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary rounded-full transition-all"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  data-ocid="subscribe.submit_button"
+                  onClick={handleUpload}
+                  disabled={!screenshotFile || uploading}
+                  className="w-full bg-primary text-primary-foreground font-bold py-3 rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {uploading && <Loader2 size={16} className="animate-spin" />}
+                  {uploading
+                    ? "Upload Ho Raha Hai..."
+                    : "Screenshot Upload Karein"}
+                </button>
+              </div>
+            ) : (
+              /* === FREE PLAN: Direct submit for approval === */
+              <div className="bg-white rounded-2xl border border-border shadow-card p-6 space-y-5">
+                <h3 className="font-heading font-bold text-lg text-foreground">
+                  Free Plan Confirmation
+                </h3>
+                <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+                  <p className="text-sm text-orange-700 font-medium mb-1">
+                    \ud83d\udce2 Free Plan mein aapki profile par ads dikhenge
+                  </p>
+                  <p className="text-xs text-orange-600">
+                    Kabhi bhi Premium upgrade kar sakte hain.
+                  </p>
+                </div>
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+                  <p className="text-sm text-green-700 font-medium">
+                    \u2705 Koi payment nahi, turant profile live hogi
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  data-ocid="subscribe.submit_button"
+                  onClick={handleFreeSubmit}
+                  disabled={freeSubmitting}
+                  className="w-full bg-slate-700 text-white font-bold py-3 rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {freeSubmitting ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <CheckCircle size={16} />
+                  )}
+                  {freeSubmitting ? "Processing..." : "Submit for Approval"}
+                </button>
+              </div>
+            )}
           </motion.div>
         )}
       </div>

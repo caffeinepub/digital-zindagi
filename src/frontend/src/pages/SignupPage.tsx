@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { UserRole } from "../backend";
+import { ALL_CATEGORIES } from "../components/CategoryGrid";
 import {
   SUPER_ADMIN_EMAIL,
   hashPassword,
@@ -20,6 +21,30 @@ const SECURITY_QUESTIONS = [
   "School Ka Naam",
 ];
 
+// Merge static + admin-created categories
+function getCategories(): { name: string; emoji: string }[] {
+  const staticCats = ALL_CATEGORIES.map((c) => ({
+    name: c.name,
+    emoji: c.emoji,
+  }));
+  try {
+    const custom = JSON.parse(
+      localStorage.getItem("dz_categories") ?? "[]",
+    ) as {
+      name: string;
+      emoji: string;
+    }[];
+    const existing = new Set(staticCats.map((c) => c.name.toLowerCase()));
+    const merged = [
+      ...staticCats,
+      ...custom.filter((c) => !existing.has(c.name.toLowerCase())),
+    ];
+    return merged;
+  } catch {
+    return staticCats;
+  }
+}
+
 export default function SignupPage() {
   const [role, setRole] = useState<"customer" | "provider">("customer");
   const [name, setName] = useState("");
@@ -31,11 +56,13 @@ export default function SignupPage() {
   const [secA, setSecA] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [category, setCategory] = useState("");
 
   const { login } = useAuth();
   const { actor } = useActor();
   const { data: adminConfig } = useAdminConfig();
   const navigate = useNavigate();
+  const categories = getCategories();
 
   // Admin QR toggle
   const showRegistrationQR = (() => {
@@ -61,6 +88,10 @@ export default function SignupPage() {
       toast.error("Password kam se kam 6 characters ka hona chahiye");
       return;
     }
+    if (role === "provider" && !category) {
+      toast.error("Provider ke liye category select karna zaroori hai");
+      return;
+    }
     if (!actor) {
       toast.error("Backend se connect nahi, thoda wait karein");
       return;
@@ -83,8 +114,16 @@ export default function SignupPage() {
         email: email.trim() || undefined,
         isSuperAdmin,
       });
+      // Set category on provider profile
+      if (role === "provider" && category) {
+        try {
+          await actor.updateProviderProfile(user.id, name, "", "", category);
+        } catch {
+          // Non-critical, continue
+        }
+      }
       toast.success("Account ban gaya!");
-      if (role === "provider") navigate("/provider/subscribe");
+      if (role === "provider") navigate("/provider/choose-plan");
       else navigate("/");
     } catch (err: any) {
       toast.error(
@@ -152,6 +191,35 @@ export default function SignupPage() {
               </button>
             </div>
           </div>
+
+          {/* Category dropdown — only for providers */}
+          {role === "provider" && (
+            <div>
+              <label
+                className="block text-sm font-medium text-foreground mb-1.5"
+                htmlFor="service-category"
+              >
+                Service Category <span className="text-destructive">*</span>
+              </label>
+              <select
+                id="service-category"
+                data-ocid="signup.select"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring bg-white"
+                required
+              >
+                <option value="" disabled>
+                  Category chunein...
+                </option>
+                {categories.map((c) => (
+                  <option key={c.name} value={c.name}>
+                    {c.emoji} {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label
@@ -225,16 +293,16 @@ export default function SignupPage() {
                   type={showPwd ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Min 6 characters"
-                  className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring pr-9"
+                  placeholder="Password"
+                  className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring pr-10"
                   autoComplete="new-password"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPwd(!showPwd)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  onClick={() => setShowPwd((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
-                  {showPwd ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {showPwd ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
             </div>
@@ -248,10 +316,10 @@ export default function SignupPage() {
               <input
                 id="cpwd"
                 data-ocid="signup.input"
-                type="password"
+                type={showPwd ? "text" : "password"}
                 value={confirmPwd}
                 onChange={(e) => setConfirmPwd(e.target.value)}
-                placeholder="Password dobara"
+                placeholder="Dobara daalein"
                 className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                 autoComplete="new-password"
               />
@@ -261,12 +329,12 @@ export default function SignupPage() {
           <div>
             <label
               className="block text-sm font-medium text-foreground mb-1.5"
-              htmlFor="secQ"
+              htmlFor="secq"
             >
               Security Question
             </label>
             <select
-              id="secQ"
+              id="secq"
               data-ocid="signup.select"
               value={secQ}
               onChange={(e) => setSecQ(e.target.value)}
@@ -283,75 +351,59 @@ export default function SignupPage() {
           <div>
             <label
               className="block text-sm font-medium text-foreground mb-1.5"
-              htmlFor="secA"
+              htmlFor="seca"
             >
               Security Answer
             </label>
             <input
-              id="secA"
+              id="seca"
               data-ocid="signup.input"
               type="text"
               value={secA}
               onChange={(e) => setSecA(e.target.value)}
-              placeholder="Apna jawab daalein"
+              placeholder="Jawab likhein"
               className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
 
-          {/* Admin QR Code for Providers */}
-          {role === "provider" && showRegistrationQR && adminConfig?.upiId && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-accent rounded-2xl p-4 text-center border border-border"
-              data-ocid="signup.card"
-            >
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <QrCode size={18} className="text-primary" />
-                <p className="text-sm font-semibold text-foreground">
-                  Payment QR Code
-                </p>
-              </div>
-              <p className="text-xs text-muted-foreground mb-3">
-                UPI ID: <strong>{adminConfig.upiId}</strong>
-              </p>
-              {adminConfig.qrCodeBlobId && (
-                <img
-                  src={adminConfig.qrCodeBlobId.toString()}
-                  alt="Payment QR"
-                  className="w-32 h-32 object-contain mx-auto rounded-xl border border-border"
+          {/* Registration QR from admin config */}
+          {showRegistrationQR && adminConfig?.qrCodeBlobId && (
+            <div className="bg-accent rounded-2xl p-4 text-center">
+              <p className="text-sm font-medium text-foreground mb-1">
+                <QrCode
+                  size={14}
+                  className="inline mr-1.5 -mt-0.5 text-primary"
                 />
-              )}
-              <p className="text-xs text-muted-foreground mt-2">
-                Payment karke screenshot upload karein
+                Subscription Payment QR
               </p>
-            </motion.div>
+              <img
+                src={adminConfig.qrCodeBlobId.getDirectURL()}
+                alt="Admin UPI QR"
+                className="w-32 h-32 mx-auto object-contain"
+              />
+              {adminConfig.upiId && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  UPI: {adminConfig.upiId}
+                </p>
+              )}
+            </div>
           )}
 
           <button
             type="submit"
             data-ocid="signup.submit_button"
             disabled={loading}
-            className="w-full bg-primary text-primary-foreground font-bold py-3 rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-60"
+            className="w-full bg-primary text-primary-foreground font-bold py-3.5 rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {loading && <Loader2 size={16} className="animate-spin" />}
             {loading ? "Account Ban Raha Hai..." : "Account Banao"}
           </button>
 
-          <p className="text-xs text-muted-foreground text-center">
-            Register kar ke aap hamari{" "}
-            <span className="underline cursor-pointer">
-              Terms &amp; Conditions
-            </span>{" "}
-            se agree karte hain
-          </p>
-
           <p className="text-center text-sm text-muted-foreground">
             Pehle se account hai?{" "}
             <Link
               to="/login"
-              data-ocid="signup.link"
-              className="text-primary font-medium hover:underline"
+              className="text-primary font-semibold hover:underline"
             >
               Login Karein
             </Link>

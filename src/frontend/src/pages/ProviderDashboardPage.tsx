@@ -1,14 +1,25 @@
+import { Badge } from "@/components/ui/badge";
 import { useQueryClient } from "@tanstack/react-query";
-import { Camera, Loader2, Plus, Save, Trash2 } from "lucide-react";
+import {
+  Camera,
+  CheckCircle,
+  Loader2,
+  Package,
+  Plus,
+  QrCode,
+  Save,
+  Trash2,
+  XCircle,
+} from "lucide-react";
 import { motion } from "motion/react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { ApprovalStatus, ExternalBlob } from "../backend";
-import type { ServiceRate } from "../backend";
+import type { Order, ServiceRate } from "../backend";
 import Header from "../components/Header";
 import { useAuth } from "../contexts/AuthContext";
 import { useActor } from "../hooks/useActor";
-import { useProviderProfile } from "../hooks/useQueries";
+import { useProviderOrders, useProviderProfile } from "../hooks/useQueries";
 import { Link } from "../lib/router";
 
 const CATEGORIES = [
@@ -26,19 +37,150 @@ const CATEGORIES = [
   "Salon",
 ];
 
+type TabKey = "profile" | "photos" | "services" | "orders" | "subscription";
+
+function statusBadgeStyle(status: string) {
+  switch (status) {
+    case "pending":
+      return "bg-yellow-100 text-yellow-800 border-yellow-200";
+    case "accepted":
+      return "bg-blue-100 text-blue-800 border-blue-200";
+    case "completed":
+      return "bg-emerald-100 text-emerald-800 border-emerald-200";
+    case "cancelled":
+      return "bg-red-100 text-red-800 border-red-200";
+    default:
+      return "bg-muted text-muted-foreground border-border";
+  }
+}
+
+function OrderCard({
+  order,
+  onUpdateStatus,
+  index,
+}: {
+  order: Order;
+  onUpdateStatus: (orderId: bigint, status: string) => Promise<void>;
+  index: number;
+}) {
+  const [updating, setUpdating] = useState(false);
+
+  const handleStatus = async (status: string) => {
+    setUpdating(true);
+    try {
+      await onUpdateStatus(order.id, status);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const createdDate = new Date(
+    Number(order.createdAt) / 1_000_000,
+  ).toLocaleDateString("hi-IN");
+
+  return (
+    <div
+      data-ocid={`dashboard.item.${index}`}
+      className="bg-white rounded-2xl border border-border shadow-xs p-4 space-y-3"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-semibold text-sm text-foreground">
+            {order.customerName}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">{createdDate}</p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Badge variant="outline" className="text-xs capitalize">
+            {order.orderType}
+          </Badge>
+          <Badge
+            variant="outline"
+            className={`text-xs capitalize ${statusBadgeStyle(order.status)}`}
+          >
+            {order.status}
+          </Badge>
+        </div>
+      </div>
+
+      <p className="text-sm text-foreground line-clamp-3">
+        {order.description}
+      </p>
+
+      {order.imageUrl && (
+        <img
+          src={order.imageUrl}
+          alt="Order se judi tasveer"
+          className="w-full max-h-40 object-cover rounded-xl"
+        />
+      )}
+
+      {/* Action buttons based on status */}
+      {order.status === "pending" && (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            data-ocid={`dashboard.confirm_button.${index}`}
+            onClick={() => handleStatus("accepted")}
+            disabled={updating}
+            className="flex-1 flex items-center justify-center gap-1.5 bg-primary text-primary-foreground text-xs font-semibold py-2 rounded-xl hover:opacity-90 disabled:opacity-60"
+          >
+            {updating ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <CheckCircle size={12} />
+            )}
+            Accept
+          </button>
+          <button
+            type="button"
+            data-ocid={`dashboard.delete_button.${index}`}
+            onClick={() => handleStatus("cancelled")}
+            disabled={updating}
+            className="flex-1 flex items-center justify-center gap-1.5 bg-destructive/10 text-destructive text-xs font-semibold py-2 rounded-xl hover:bg-destructive/20 disabled:opacity-60"
+          >
+            <XCircle size={12} />
+            Cancel
+          </button>
+        </div>
+      )}
+      {order.status === "accepted" && (
+        <button
+          type="button"
+          data-ocid={`dashboard.confirm_button.${index}`}
+          onClick={() => handleStatus("completed")}
+          disabled={updating}
+          className="w-full flex items-center justify-center gap-1.5 bg-emerald-600 text-white text-xs font-semibold py-2 rounded-xl hover:opacity-90 disabled:opacity-60"
+        >
+          {updating ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <CheckCircle size={12} />
+          )}
+          Mark Complete
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function ProviderDashboardPage() {
-  const [tab, setTab] = useState<
-    "profile" | "photos" | "services" | "subscription"
-  >("profile");
+  const [tab, setTab] = useState<TabKey>("profile");
   const { user } = useAuth();
   const { actor } = useActor();
   const qc = useQueryClient();
   const { data: profile, isLoading } = useProviderProfile(user?.userId ?? null);
+  const { data: orders, isLoading: ordersLoading } = useProviderOrders(
+    user?.userId ?? null,
+  );
 
   const [shopName, setShopName] = useState("");
   const [description, setDescription] = useState("");
   const [address, setAddress] = useState("");
-  const [category, setCategory] = useState("Plumber");
+  const [category, setCategory] = useState("");
+  const [upiId, setUpiId] = useState("");
+  const [qrCodeBlobId, setQrCodeBlobId] = useState<string | null>(null);
+  const [uploadingQr, setUploadingQr] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
 
   const [newServiceName, setNewServiceName] = useState("");
@@ -48,6 +190,7 @@ export default function ProviderDashboardPage() {
 
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const qrInputRef = useRef<HTMLInputElement>(null);
 
   if (!user) return null;
 
@@ -95,12 +238,14 @@ export default function ProviderDashboardPage() {
     if (!actor) return;
     setSavingProfile(true);
     try {
-      await actor.updateProviderProfile(
+      await actor.updateProviderProfileFull(
         user.userId,
         shopName || profile?.shopName || "",
         description || profile?.description || "",
         address || profile?.address || "",
         category || profile?.category || "Plumber",
+        upiId || profile?.upiId || "",
+        qrCodeBlobId ?? profile?.qrCodeBlobId ?? null,
       );
       toast.success("Profile save ho gayi!");
       qc.invalidateQueries({ queryKey: ["providerProfile"] });
@@ -108,6 +253,22 @@ export default function ProviderDashboardPage() {
       toast.error(err?.message ?? "Save nahi ho saka");
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const handleQrUpload = async (file: File) => {
+    if (!actor) return;
+    setUploadingQr(true);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const blob = ExternalBlob.fromBytes(bytes);
+      const url = blob.getDirectURL();
+      setQrCodeBlobId(url);
+      toast.success("QR Code upload ho gaya! Save zaroor karein.");
+    } catch (err: any) {
+      toast.error(err?.message ?? "QR upload fail ho gaya");
+    } finally {
+      setUploadingQr(false);
     }
   };
 
@@ -172,12 +333,24 @@ export default function ProviderDashboardPage() {
     }
   };
 
-  const tabs = [
+  const handleUpdateOrderStatus = async (orderId: bigint, status: string) => {
+    if (!actor) return;
+    try {
+      await actor.updateOrderStatus(orderId, status);
+      toast.success(`Order ${status} ho gaya!`);
+      qc.invalidateQueries({ queryKey: ["providerOrders"] });
+    } catch (err: any) {
+      toast.error(err?.message ?? "Status update nahi ho saka");
+    }
+  };
+
+  const tabs: { key: TabKey; label: string }[] = [
     { key: "profile", label: "Shop Profile" },
     { key: "photos", label: "Photos" },
     { key: "services", label: "Services" },
+    { key: "orders", label: "Orders" },
     { key: "subscription", label: "Subscription" },
-  ] as const;
+  ];
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -186,7 +359,7 @@ export default function ProviderDashboardPage() {
       <div className="bg-emerald-header text-white px-4 py-5">
         <div className="max-w-4xl mx-auto">
           <h1 className="font-heading font-bold text-xl">
-            Apna Shop Dekhein 🏪
+            Apna Shop Dekhein 🏦
           </h1>
           <p className="text-white/70 text-sm mt-0.5">
             {user.name} &bull; Provider Dashboard
@@ -209,10 +382,16 @@ export default function ProviderDashboardPage() {
               }`}
             >
               {t.label}
+              {t.key === "orders" && orders && orders.length > 0 && (
+                <span className="ml-1.5 bg-primary text-primary-foreground text-xs rounded-full px-1.5 py-0.5">
+                  {orders.filter((o) => o.status === "pending").length || ""}
+                </span>
+              )}
             </button>
           ))}
         </div>
 
+        {/* Profile Tab */}
         {tab === "profile" && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -286,7 +465,7 @@ export default function ProviderDashboardPage() {
                   id="d-category"
                   data-ocid="dashboard.select"
                   value={
-                    category !== "Plumber"
+                    category !== ""
                       ? category
                       : (profile?.category ?? "Plumber")
                   }
@@ -300,6 +479,70 @@ export default function ProviderDashboardPage() {
                   ))}
                 </select>
               </div>
+
+              {/* UPI ID */}
+              <div>
+                <label
+                  htmlFor="d-upi"
+                  className="block text-sm font-medium text-foreground mb-1.5"
+                >
+                  UPI ID (Optional)
+                </label>
+                <input
+                  id="d-upi"
+                  data-ocid="dashboard.input"
+                  type="text"
+                  value={upiId !== "" ? upiId : (profile?.upiId ?? "")}
+                  onChange={(e) => setUpiId(e.target.value)}
+                  placeholder="example@upi"
+                  className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+
+              {/* QR Code */}
+              <div>
+                <label
+                  htmlFor="d-qr"
+                  className="block text-sm font-medium text-foreground mb-1.5"
+                >
+                  QR Code Upload (Optional)
+                </label>
+                <div className="flex items-center gap-3">
+                  {(qrCodeBlobId ?? profile?.qrCodeBlobId) && (
+                    <img
+                      src={qrCodeBlobId ?? profile?.qrCodeBlobId ?? ""}
+                      alt="Payment QR Code"
+                      className="w-16 h-16 rounded-xl border border-border object-contain bg-white"
+                    />
+                  )}
+                  <button
+                    type="button"
+                    data-ocid="dashboard.upload_button"
+                    onClick={() => qrInputRef.current?.click()}
+                    disabled={uploadingQr}
+                    className="flex items-center gap-2 bg-muted text-foreground text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-accent transition-colors disabled:opacity-60 border border-border"
+                  >
+                    {uploadingQr ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <QrCode size={14} />
+                    )}
+                    QR Upload Karein
+                  </button>
+                  <input
+                    id="d-qr"
+                    ref={qrInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleQrUpload(f);
+                    }}
+                  />
+                </div>
+              </div>
+
               <button
                 type="button"
                 data-ocid="dashboard.save_button"
@@ -318,6 +561,7 @@ export default function ProviderDashboardPage() {
           </motion.div>
         )}
 
+        {/* Photos Tab */}
         {tab === "photos" && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -391,6 +635,7 @@ export default function ProviderDashboardPage() {
           </motion.div>
         )}
 
+        {/* Services Tab */}
         {tab === "services" && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -488,6 +733,50 @@ export default function ProviderDashboardPage() {
           </motion.div>
         )}
 
+        {/* Orders Tab */}
+        {tab === "orders" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="space-y-3"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-foreground">Mere Orders</h3>
+              {orders && orders.length > 0 && (
+                <Badge variant="secondary">{orders.length} orders</Badge>
+              )}
+            </div>
+
+            {ordersLoading ? (
+              <div
+                data-ocid="dashboard.loading_state"
+                className="flex items-center justify-center py-20"
+              >
+                <Loader2 size={28} className="animate-spin text-primary" />
+              </div>
+            ) : orders && orders.length > 0 ? (
+              orders.map((order, i) => (
+                <OrderCard
+                  key={order.id.toString()}
+                  order={order}
+                  onUpdateStatus={handleUpdateOrderStatus}
+                  index={i + 1}
+                />
+              ))
+            ) : (
+              <div
+                data-ocid="dashboard.empty_state"
+                className="text-center py-20 text-muted-foreground"
+              >
+                <Package size={40} className="mx-auto mb-3 opacity-30" />
+                <p className="font-medium">Abhi koi order nahi hai</p>
+                <p className="text-xs mt-1">Orders yahan dikhenge</p>
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* Subscription Tab */}
         {tab === "subscription" && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <div className="bg-white rounded-2xl border border-border shadow-card p-6 space-y-4">

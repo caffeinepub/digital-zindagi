@@ -1,4 +1,4 @@
-import { Leaf } from "lucide-react";
+import { Calculator, Leaf } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -28,25 +28,27 @@ export default function HomePage() {
 
   // PWA Install
   const [installPrompt, setInstallPrompt] = useState<any>(null);
-  const [showInstall, setShowInstall] = useState(false);
 
   useEffect(() => {
     const handler = (e: any) => {
       e.preventDefault();
       setInstallPrompt(e);
-      setShowInstall(true);
     };
     window.addEventListener("beforeinstallprompt", handler);
     return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
 
   const handleInstall = () => {
-    if (!installPrompt) return;
-    installPrompt.prompt();
-    installPrompt.userChoice.then(() => {
-      setInstallPrompt(null);
-      setShowInstall(false);
-    });
+    if (installPrompt) {
+      installPrompt.prompt();
+      installPrompt.userChoice.then(() => {
+        setInstallPrompt(null);
+      });
+    } else {
+      toast.info(
+        "Chrome Menu (⋮) > 'Install App' par jayein — ya browser mein 'Add to Home Screen' use karein",
+      );
+    }
   };
 
   const handleLogoTap = () => {
@@ -59,7 +61,7 @@ export default function HomePage() {
     if (tapCountRef.current >= 5) {
       tapCountRef.current = 0;
       if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
-      navigate("/admin/pin");
+      navigate("/admin");
       return;
     }
 
@@ -94,8 +96,8 @@ export default function HomePage() {
       <main className="flex-1">
         <section className="bg-emerald-hero px-4 py-4">
           <div className="max-w-7xl mx-auto">
-            {/* 5-tap Logo Trigger */}
-            <div className="flex justify-center mb-3">
+            {/* Logo row + Install button */}
+            <div className="flex flex-col items-center mb-3 gap-2">
               <button
                 type="button"
                 data-ocid="home.button"
@@ -110,7 +112,19 @@ export default function HomePage() {
                   Digital Zindagi
                 </span>
               </button>
+
+              {/* Install button — always visible */}
+              <button
+                type="button"
+                data-ocid="home.install_button"
+                onClick={handleInstall}
+                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white text-sm font-semibold px-5 py-2 rounded-full border border-white/40 transition-all backdrop-blur-sm"
+              >
+                <span>📲</span>
+                Install App
+              </button>
             </div>
+
             <HeroCarousel banners={banners} loading={bannersLoading} />
           </div>
         </section>
@@ -123,37 +137,6 @@ export default function HomePage() {
             </p>
           </div>
         </section>
-
-        {/* PWA Install Banner */}
-        {showInstall && (
-          <div className="bg-primary/10 border-b border-primary/20 px-4 py-2.5">
-            <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">📲</span>
-                <span className="text-sm font-medium text-foreground">
-                  Digital Zindagi app install karein
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  data-ocid="home.install_button"
-                  onClick={handleInstall}
-                  className="bg-primary text-primary-foreground text-xs font-bold px-4 py-2 rounded-xl hover:opacity-90"
-                >
-                  Install App
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowInstall(false)}
-                  className="text-muted-foreground text-xs px-2"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         <section className="bg-white border-b border-border px-4 py-4">
           <div className="max-w-2xl mx-auto">
@@ -185,6 +168,37 @@ export default function HomePage() {
               </button>
             </form>
           </div>
+        </section>
+
+        {/* Rate Calculator — Primary Feature Button */}
+        <section className="max-w-7xl mx-auto px-4 pt-6 pb-2">
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35 }}
+          >
+            <button
+              type="button"
+              onClick={() => navigate("/scrap-calculator")}
+              data-ocid="home.rate_calculator_button"
+              className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white p-5 flex items-center gap-4 shadow-lg hover:shadow-xl hover:from-emerald-700 hover:to-emerald-600 transition-all active:scale-[0.99]"
+            >
+              <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center flex-shrink-0">
+                <Calculator size={32} className="text-white" />
+              </div>
+              <div className="text-left flex-1">
+                <p className="font-heading font-bold text-xl">
+                  🧮 Rate Calculator
+                </p>
+                <p className="text-white/80 text-sm mt-0.5">
+                  Scrap ka sahi daam pata karein — Lohaa, Kaagaz, Taamba
+                </p>
+              </div>
+              <div className="ml-auto text-white/60 text-2xl flex-shrink-0">
+                →
+              </div>
+            </button>
+          </motion.div>
         </section>
 
         <section className="max-w-7xl mx-auto px-4 py-8">

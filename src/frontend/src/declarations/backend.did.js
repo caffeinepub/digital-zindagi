@@ -55,6 +55,11 @@ export const SubscriptionStatus = IDL.Variant({
   'pending' : IDL.Null,
   'rejected' : IDL.Null,
 });
+export const PlanType = IDL.Variant({
+  'pending' : IDL.Null,
+  'premium' : IDL.Null,
+  'free' : IDL.Null,
+});
 export const ProviderProfile = IDL.Record({
   'userId' : IDL.Nat,
   'subscriptionExpiry' : IDL.Opt(IDL.Int),
@@ -65,8 +70,11 @@ export const ProviderProfile = IDL.Record({
   'paymentScreenshotBlobId' : IDL.Opt(IDL.Text),
   'address' : IDL.Text,
   'serviceRates' : IDL.Vec(ServiceRate),
+  'upiId' : IDL.Text,
   'shopName' : IDL.Text,
   'category' : IDL.Text,
+  'qrCodeBlobId' : IDL.Opt(IDL.Text),
+  'planType' : PlanType,
   'photos' : IDL.Vec(IDL.Text),
 });
 export const ExternalBlob = IDL.Vec(IDL.Nat8);
@@ -97,6 +105,17 @@ export const UserProfile = IDL.Record({
   'name' : IDL.Text,
   'role' : UserRole,
   'mobile' : MobileNumber,
+});
+export const Order = IDL.Record({
+  'id' : IDL.Nat,
+  'customerName' : IDL.Text,
+  'status' : IDL.Text,
+  'createdAt' : IDL.Int,
+  'description' : IDL.Text,
+  'orderType' : IDL.Text,
+  'imageUrl' : IDL.Opt(IDL.Text),
+  'customerId' : IDL.Nat,
+  'providerId' : IDL.Nat,
 });
 export const SubscriptionPricing = IDL.Record({
   'threeMonthPrice' : IDL.Nat,
@@ -157,6 +176,7 @@ export const idlService = IDL.Service({
   'getActiveBanners' : IDL.Func([], [IDL.Vec(Banner)], ['query']),
   'getActiveProviders' : IDL.Func([], [IDL.Vec(ProviderProfile)], ['query']),
   'getAdminConfig' : IDL.Func([], [IDL.Opt(AdminConfig)], ['query']),
+  'getAllProviders' : IDL.Func([], [IDL.Vec(ProviderProfile)], ['query']),
   'getAllToggles' : IDL.Func(
       [],
       [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Bool))],
@@ -165,6 +185,14 @@ export const idlService = IDL.Service({
   'getAllUsers' : IDL.Func([], [IDL.Vec(User)], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole__1], ['query']),
+  'getCustomerOrders' : IDL.Func([IDL.Nat], [IDL.Vec(Order)], ['query']),
+  'getOrderById' : IDL.Func([IDL.Nat], [IDL.Opt(Order)], ['query']),
+  'getOrdersByStatus' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Vec(Order)],
+      ['query'],
+    ),
+  'getProviderOrders' : IDL.Func([IDL.Nat], [IDL.Vec(Order)], ['query']),
   'getProviderProfile' : IDL.Func(
       [IDL.Nat],
       [IDL.Opt(ProviderProfile)],
@@ -198,6 +226,11 @@ export const idlService = IDL.Service({
   'isCallerApproved' : IDL.Func([], [IDL.Bool], ['query']),
   'listApprovals' : IDL.Func([], [IDL.Vec(UserApprovalInfo)], ['query']),
   'login' : IDL.Func([MobileNumber, IDL.Text], [User], []),
+  'placeOrder' : IDL.Func(
+      [IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
+      [IDL.Nat],
+      [],
+    ),
   'registerUser' : IDL.Func(
       [IDL.Text, MobileNumber, IDL.Text, UserRole, IDL.Text, IDL.Text],
       [],
@@ -209,9 +242,24 @@ export const idlService = IDL.Service({
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'searchUsers' : IDL.Func([IDL.Text], [IDL.Vec(User)], ['query']),
   'setApproval' : IDL.Func([IDL.Principal, ApprovalStatus], [], []),
+  'setPlanType' : IDL.Func([IDL.Nat, PlanType], [], []),
   'updateAdminConfig' : IDL.Func([AdminConfig], [], []),
+  'updateOrderStatus' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'updateProviderProfile' : IDL.Func(
       [IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+      [],
+      [],
+    ),
+  'updateProviderProfileFull' : IDL.Func(
+      [
+        IDL.Nat,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Opt(IDL.Text),
+      ],
       [],
       [],
     ),
@@ -271,6 +319,11 @@ export const idlFactory = ({ IDL }) => {
     'pending' : IDL.Null,
     'rejected' : IDL.Null,
   });
+  const PlanType = IDL.Variant({
+    'pending' : IDL.Null,
+    'premium' : IDL.Null,
+    'free' : IDL.Null,
+  });
   const ProviderProfile = IDL.Record({
     'userId' : IDL.Nat,
     'subscriptionExpiry' : IDL.Opt(IDL.Int),
@@ -281,8 +334,11 @@ export const idlFactory = ({ IDL }) => {
     'paymentScreenshotBlobId' : IDL.Opt(IDL.Text),
     'address' : IDL.Text,
     'serviceRates' : IDL.Vec(ServiceRate),
+    'upiId' : IDL.Text,
     'shopName' : IDL.Text,
     'category' : IDL.Text,
+    'qrCodeBlobId' : IDL.Opt(IDL.Text),
+    'planType' : PlanType,
     'photos' : IDL.Vec(IDL.Text),
   });
   const ExternalBlob = IDL.Vec(IDL.Nat8);
@@ -313,6 +369,17 @@ export const idlFactory = ({ IDL }) => {
     'name' : IDL.Text,
     'role' : UserRole,
     'mobile' : MobileNumber,
+  });
+  const Order = IDL.Record({
+    'id' : IDL.Nat,
+    'customerName' : IDL.Text,
+    'status' : IDL.Text,
+    'createdAt' : IDL.Int,
+    'description' : IDL.Text,
+    'orderType' : IDL.Text,
+    'imageUrl' : IDL.Opt(IDL.Text),
+    'customerId' : IDL.Nat,
+    'providerId' : IDL.Nat,
   });
   const SubscriptionPricing = IDL.Record({
     'threeMonthPrice' : IDL.Nat,
@@ -373,6 +440,7 @@ export const idlFactory = ({ IDL }) => {
     'getActiveBanners' : IDL.Func([], [IDL.Vec(Banner)], ['query']),
     'getActiveProviders' : IDL.Func([], [IDL.Vec(ProviderProfile)], ['query']),
     'getAdminConfig' : IDL.Func([], [IDL.Opt(AdminConfig)], ['query']),
+    'getAllProviders' : IDL.Func([], [IDL.Vec(ProviderProfile)], ['query']),
     'getAllToggles' : IDL.Func(
         [],
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Bool))],
@@ -381,6 +449,14 @@ export const idlFactory = ({ IDL }) => {
     'getAllUsers' : IDL.Func([], [IDL.Vec(User)], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole__1], ['query']),
+    'getCustomerOrders' : IDL.Func([IDL.Nat], [IDL.Vec(Order)], ['query']),
+    'getOrderById' : IDL.Func([IDL.Nat], [IDL.Opt(Order)], ['query']),
+    'getOrdersByStatus' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Vec(Order)],
+        ['query'],
+      ),
+    'getProviderOrders' : IDL.Func([IDL.Nat], [IDL.Vec(Order)], ['query']),
     'getProviderProfile' : IDL.Func(
         [IDL.Nat],
         [IDL.Opt(ProviderProfile)],
@@ -414,6 +490,11 @@ export const idlFactory = ({ IDL }) => {
     'isCallerApproved' : IDL.Func([], [IDL.Bool], ['query']),
     'listApprovals' : IDL.Func([], [IDL.Vec(UserApprovalInfo)], ['query']),
     'login' : IDL.Func([MobileNumber, IDL.Text], [User], []),
+    'placeOrder' : IDL.Func(
+        [IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Nat],
+        [],
+      ),
     'registerUser' : IDL.Func(
         [IDL.Text, MobileNumber, IDL.Text, UserRole, IDL.Text, IDL.Text],
         [],
@@ -425,9 +506,24 @@ export const idlFactory = ({ IDL }) => {
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'searchUsers' : IDL.Func([IDL.Text], [IDL.Vec(User)], ['query']),
     'setApproval' : IDL.Func([IDL.Principal, ApprovalStatus], [], []),
+    'setPlanType' : IDL.Func([IDL.Nat, PlanType], [], []),
     'updateAdminConfig' : IDL.Func([AdminConfig], [], []),
+    'updateOrderStatus' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'updateProviderProfile' : IDL.Func(
         [IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [],
+        [],
+      ),
+    'updateProviderProfileFull' : IDL.Func(
+        [
+          IDL.Nat,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+        ],
         [],
         [],
       ),
