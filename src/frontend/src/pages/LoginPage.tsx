@@ -198,7 +198,7 @@ export default function LoginPage() {
           {/* Digital Zindagi Logo */}
           <div className="flex justify-center mb-4">
             <img
-              src="/assets/generated/dz-logo-192.dim_192x192.png"
+              src="/logo.png"
               alt="Digital Zindagi Logo"
               className="w-16 h-16 rounded-full object-cover"
             />

@@ -16,14 +16,17 @@ import {
   Search,
   Send,
   Settings,
+  Share2,
   Shield,
   Star,
   ToggleLeft,
   ToggleRight,
   Trash2,
+  TrendingUp,
   UserCog,
   Users,
   XCircle,
+  Youtube,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
@@ -159,12 +162,14 @@ function ProviderQuickActionModal({
               )}
               <span
                 className={`inline-block text-xs font-bold px-2 py-0.5 rounded-full ${
-                  profile.planType === "premium"
+                  getPlanLabel(profile.planType) === "premium"
                     ? "bg-emerald-100 text-emerald-700"
                     : "bg-gray-100 text-gray-600"
                 }`}
               >
-                {profile.planType === "premium" ? "⭐ Premium" : "🆓 Free"}
+                {getPlanLabel(profile.planType) === "premium"
+                  ? "⭐ Premium"
+                  : "🆓 Free"}
               </span>
             </div>
           )}
@@ -224,6 +229,19 @@ function ProviderQuickActionModal({
       </motion.div>
     </div>
   );
+}
+
+// Helper: convert Motoko variant to readable string
+function getRoleLabel(role: unknown): string {
+  if (!role || typeof role !== "object") return String(role ?? "");
+  const keys = Object.keys(role as object);
+  return keys[0] ?? String(role);
+}
+
+function getPlanLabel(plan: unknown): string {
+  if (!plan || typeof plan !== "object") return String(plan ?? "pending");
+  const keys = Object.keys(plan as object);
+  return keys[0] ?? "pending";
 }
 
 // ---- User Management Section ----
@@ -401,7 +419,9 @@ function UserManagement() {
                     {new Date(Number(u.createdAt)).toLocaleDateString("en-IN")}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
-                    <span className="capitalize text-xs">{u.role}</span>
+                    <span className="capitalize text-xs">
+                      {getRoleLabel(u.role)}
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -495,7 +515,7 @@ function GlobalSearch() {
                   className="border-t border-border hover:bg-muted/50"
                 >
                   <td className="px-4 py-3 font-medium">
-                    {String(u.role).toLowerCase() === "provider" ? (
+                    {getRoleLabel(u.role).toLowerCase() === "provider" ? (
                       <button
                         type="button"
                         data-ocid={`admin.button.${i + 1}`}
@@ -519,7 +539,9 @@ function GlobalSearch() {
                     {new Date(Number(u.createdAt)).toLocaleDateString("en-IN")}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
-                    <span className="capitalize text-xs">{u.role}</span>
+                    <span className="capitalize text-xs">
+                      {getRoleLabel(u.role)}
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -538,7 +560,7 @@ function GlobalSearch() {
 
       {/* Provider Quick Action Modal for search results */}
       {selectedUser &&
-        String(selectedUser.role).toLowerCase() === "provider" && (
+        getRoleLabel(selectedUser.role).toLowerCase() === "provider" && (
           <ProviderQuickActionModal
             user={selectedUser}
             profile={selectedProfile}
@@ -555,6 +577,56 @@ function ProviderApprovals() {
   const approveM = useApproveProvider();
   const rejectM = useRejectProvider();
   const [approveMap, setApproveMap] = useState<Record<string, string>>({});
+
+  // Local providers from localStorage (dz_providers)
+  const [localProviders, setLocalProviders] = useState<
+    {
+      id: string;
+      name: string;
+      mobile: string;
+      category: string;
+      planType: string;
+      status: string;
+      createdAt: string;
+    }[]
+  >(() => {
+    try {
+      const all = JSON.parse(localStorage.getItem("dz_providers") ?? "[]");
+      return all.filter((p: { status: string }) => p.status === "pending");
+    } catch {
+      return [];
+    }
+  });
+
+  const handleApproveLocal = (id: string) => {
+    try {
+      const all = JSON.parse(localStorage.getItem("dz_providers") ?? "[]");
+      const updated = all.map((p: { id: string; status: string }) =>
+        p.id === id ? { ...p, status: "approved" } : p,
+      );
+      localStorage.setItem("dz_providers", JSON.stringify(updated));
+      setLocalProviders(
+        updated.filter((p: { status: string }) => p.status === "pending"),
+      );
+      toast.success("Provider approve ho gaya!");
+    } catch {
+      toast.error("Error ho gaya");
+    }
+  };
+
+  const handleRejectLocal = (id: string) => {
+    try {
+      const all = JSON.parse(localStorage.getItem("dz_providers") ?? "[]");
+      const updated = all.filter((p: { id: string }) => p.id !== id);
+      localStorage.setItem("dz_providers", JSON.stringify(updated));
+      setLocalProviders(
+        updated.filter((p: { status: string }) => p.status === "pending"),
+      );
+      toast.success("Provider reject ho gaya.");
+    } catch {
+      toast.error("Error ho gaya");
+    }
+  };
 
   // Also show pending categories from managers
   const pendingCategories: { name: string; icon: string; status: string }[] =
@@ -668,6 +740,69 @@ function ProviderApprovals() {
         </div>
       )}
 
+      {/* Local Providers from Registration Form */}
+      {localProviders.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="font-heading font-semibold text-foreground">
+            Naye Registrations (Pending Approval)
+          </h3>
+          {localProviders.map((lp, i) => (
+            <div
+              key={lp.id}
+              data-ocid={`admin.item.local.${i + 1}`}
+              className="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-3"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-foreground">
+                    {lp.name || "Name nahi diya"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    📱 {lp.mobile}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    📂 {lp.category}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Plan:{" "}
+                    {lp.planType === "pending_premium"
+                      ? "⭐ Premium (Payment Pending)"
+                      : "🆓 Free (Ads)"}
+                  </p>
+                  {lp.createdAt && (
+                    <p className="text-xs text-muted-foreground">
+                      Registered:{" "}
+                      {new Date(lp.createdAt).toLocaleDateString("hi-IN")}
+                    </p>
+                  )}
+                </div>
+                <span className="bg-yellow-100 text-yellow-700 text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap">
+                  Pending
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  data-ocid={`admin.confirm_button.local.${i + 1}`}
+                  onClick={() => handleApproveLocal(lp.id)}
+                  className="flex items-center gap-1.5 bg-green-500 hover:bg-green-600 text-white text-sm font-semibold px-4 py-2 rounded-xl"
+                >
+                  <CheckCircle size={15} /> Approve
+                </button>
+                <button
+                  type="button"
+                  data-ocid={`admin.delete_button.local.${i + 1}`}
+                  onClick={() => handleRejectLocal(lp.id)}
+                  className="flex items-center gap-1.5 bg-red-50 text-red-600 border border-red-200 text-sm font-semibold px-4 py-2 rounded-xl"
+                >
+                  <XCircle size={15} /> Reject
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Provider Approvals */}
       <div className="space-y-4">
         {!pending || pending.length === 0 ? (
@@ -692,12 +827,12 @@ function ProviderApprovals() {
                     <h3 className="font-semibold text-foreground">
                       {p.shopName || "Shop Name Set Nahi"}
                     </h3>
-                    {p.planType === "premium" && (
+                    {getPlanLabel(p.planType) === "premium" && (
                       <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full font-semibold">
                         Premium ⭐
                       </span>
                     )}
-                    {p.planType === "free" && (
+                    {getPlanLabel(p.planType) === "free" && (
                       <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-semibold">
                         Free
                       </span>
@@ -1921,6 +2056,20 @@ function AdminSettings() {
   const [confirmPin, setConfirmPin] = useState("");
   const [pinSaving, setPinSaving] = useState(false);
 
+  // Security Settings — Email, Password, Mobile
+  const [adminEmail, setAdminEmail] = useState(
+    () => localStorage.getItem("dz_admin_email") ?? "sushhilkumar651@gmail.com",
+  );
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [currentAdminPassword, setCurrentAdminPassword] = useState("");
+  const [newAdminPassword, setNewAdminPassword] = useState("");
+  const [confirmAdminPassword, setConfirmAdminPassword] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [adminMobileProfile, setAdminMobileProfile] = useState(
+    () => localStorage.getItem("dz_admin_mobile") ?? "",
+  );
+  const [mobileSaving, setMobileSaving] = useState(false);
+
   // Social Links State
   const [socialLinks, setSocialLinks] = useState(() => {
     try {
@@ -2159,87 +2308,289 @@ function AdminSettings() {
         </button>
       </div>
 
-      {/* Security - PIN Change */}
-      <div className="bg-white rounded-2xl border border-border shadow-card p-6 space-y-4">
+      {/* Security Settings */}
+      <div className="bg-white rounded-2xl border border-border shadow-card p-6 space-y-6">
         <h3 className="font-heading font-semibold text-foreground flex items-center gap-2">
           <Shield size={18} className="text-primary" />
-          Security - PIN Change
+          Security Settings
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+        {/* a) Edit Email */}
+        <div className="space-y-3">
+          <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+            ✉️ Email Badlein
+          </h4>
           <div>
             <label
-              htmlFor="cur-pin"
-              className="block text-sm font-medium text-foreground mb-1.5"
+              htmlFor="sec-admin-email"
+              className="block text-xs font-medium text-muted-foreground mb-1"
             >
-              Current PIN
+              Admin Email Address
             </label>
             <input
-              id="cur-pin"
+              id="sec-admin-email"
               data-ocid="admin.input"
-              type="password"
-              inputMode="numeric"
-              maxLength={5}
-              value={currentPin}
-              onChange={(e) =>
-                setCurrentPin(e.target.value.replace(/\D/g, "").slice(0, 5))
-              }
-              placeholder="12345"
+              type="email"
+              value={adminEmail}
+              onChange={(e) => setAdminEmail(e.target.value)}
+              placeholder="Admin email"
               className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              Naya email login mein use hoga
+            </p>
           </div>
-          <div>
-            <label
-              htmlFor="new-pin"
-              className="block text-sm font-medium text-foreground mb-1.5"
-            >
-              Naya PIN
-            </label>
-            <input
-              id="new-pin"
-              data-ocid="admin.input"
-              type="password"
-              inputMode="numeric"
-              maxLength={5}
-              value={newPin}
-              onChange={(e) =>
-                setNewPin(e.target.value.replace(/\D/g, "").slice(0, 5))
-              }
-              placeholder="5 digits"
-              className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="confirm-pin"
-              className="block text-sm font-medium text-foreground mb-1.5"
-            >
-              Confirm PIN
-            </label>
-            <input
-              id="confirm-pin"
-              data-ocid="admin.input"
-              type="password"
-              inputMode="numeric"
-              maxLength={5}
-              value={confirmPin}
-              onChange={(e) =>
-                setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 5))
-              }
-              placeholder="Dobara daalein"
-              className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
+          <button
+            type="button"
+            data-ocid="admin.save_button"
+            disabled={emailSaving}
+            onClick={() => {
+              setEmailSaving(true);
+              setTimeout(() => {
+                localStorage.setItem("dz_admin_email", adminEmail);
+                toast.success("Email save ho gaya!");
+                setEmailSaving(false);
+              }, 300);
+            }}
+            className="bg-primary text-primary-foreground font-bold px-5 py-2.5 rounded-xl hover:opacity-90 flex items-center gap-2 text-sm disabled:opacity-60"
+          >
+            {emailSaving ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : null}
+            Email Save Karein
+          </button>
         </div>
-        <button
-          type="button"
-          data-ocid="admin.save_button"
-          onClick={handlePinChange}
-          disabled={pinSaving}
-          className="bg-primary text-primary-foreground font-bold px-6 py-2.5 rounded-xl hover:opacity-90 flex items-center gap-2 disabled:opacity-60"
-        >
-          {pinSaving ? <Loader2 size={15} className="animate-spin" /> : null}
-          PIN Change Karein
-        </button>
+
+        <div className="border-t border-border pt-6 space-y-3">
+          <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+            🔒 Password Badlein
+          </h4>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label
+                htmlFor="sec-cur-pwd"
+                className="block text-xs font-medium text-muted-foreground mb-1"
+              >
+                Current Password
+              </label>
+              <input
+                id="sec-cur-pwd"
+                data-ocid="admin.input"
+                type="password"
+                value={currentAdminPassword}
+                onChange={(e) => setCurrentAdminPassword(e.target.value)}
+                placeholder="Current password"
+                className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="sec-new-pwd"
+                className="block text-xs font-medium text-muted-foreground mb-1"
+              >
+                Naya Password
+              </label>
+              <input
+                id="sec-new-pwd"
+                data-ocid="admin.input"
+                type="password"
+                value={newAdminPassword}
+                onChange={(e) => setNewAdminPassword(e.target.value)}
+                placeholder="Naya password"
+                className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="sec-conf-pwd"
+                className="block text-xs font-medium text-muted-foreground mb-1"
+              >
+                Confirm Password
+              </label>
+              <input
+                id="sec-conf-pwd"
+                data-ocid="admin.input"
+                type="password"
+                value={confirmAdminPassword}
+                onChange={(e) => setConfirmAdminPassword(e.target.value)}
+                placeholder="Dobara daalein"
+                className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            data-ocid="admin.save_button"
+            disabled={passwordSaving}
+            onClick={async () => {
+              if (
+                !currentAdminPassword ||
+                !newAdminPassword ||
+                !confirmAdminPassword
+              ) {
+                toast.error("Sab password fields bharen");
+                return;
+              }
+              const storedPwd =
+                localStorage.getItem("dz_admin_password") ?? "Admin@2024";
+              if (currentAdminPassword !== storedPwd) {
+                toast.error("Current password galat hai");
+                return;
+              }
+              if (newAdminPassword !== confirmAdminPassword) {
+                toast.error("Naya password aur confirm match nahi kar rahe");
+                return;
+              }
+              if (newAdminPassword.length < 6) {
+                toast.error("Password kam se kam 6 characters ka hona chahiye");
+                return;
+              }
+              setPasswordSaving(true);
+              setTimeout(() => {
+                localStorage.setItem("dz_admin_password", newAdminPassword);
+                toast.success("Password change ho gaya!");
+                setCurrentAdminPassword("");
+                setNewAdminPassword("");
+                setConfirmAdminPassword("");
+                setPasswordSaving(false);
+              }, 300);
+            }}
+            className="bg-primary text-primary-foreground font-bold px-5 py-2.5 rounded-xl hover:opacity-90 flex items-center gap-2 text-sm disabled:opacity-60"
+          >
+            {passwordSaving ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : null}
+            Password Save Karein
+          </button>
+        </div>
+
+        {/* c) Edit Secret PIN (5-digit) */}
+        <div className="border-t border-border pt-6 space-y-3">
+          <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+            🔑 Secret PIN Badlein (5 Digits)
+          </h4>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label
+                htmlFor="cur-pin"
+                className="block text-xs font-medium text-muted-foreground mb-1"
+              >
+                Current PIN
+              </label>
+              <input
+                id="cur-pin"
+                data-ocid="admin.input"
+                type="password"
+                inputMode="numeric"
+                maxLength={5}
+                value={currentPin}
+                onChange={(e) =>
+                  setCurrentPin(e.target.value.replace(/\D/g, "").slice(0, 5))
+                }
+                placeholder="12345"
+                className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="new-pin"
+                className="block text-xs font-medium text-muted-foreground mb-1"
+              >
+                Naya PIN
+              </label>
+              <input
+                id="new-pin"
+                data-ocid="admin.input"
+                type="password"
+                inputMode="numeric"
+                maxLength={5}
+                value={newPin}
+                onChange={(e) =>
+                  setNewPin(e.target.value.replace(/\D/g, "").slice(0, 5))
+                }
+                placeholder="5 digits"
+                className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="confirm-pin"
+                className="block text-xs font-medium text-muted-foreground mb-1"
+              >
+                Confirm PIN
+              </label>
+              <input
+                id="confirm-pin"
+                data-ocid="admin.input"
+                type="password"
+                inputMode="numeric"
+                maxLength={5}
+                value={confirmPin}
+                onChange={(e) =>
+                  setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 5))
+                }
+                placeholder="Dobara daalein"
+                className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            data-ocid="admin.save_button"
+            onClick={handlePinChange}
+            disabled={pinSaving}
+            className="bg-primary text-primary-foreground font-bold px-5 py-2.5 rounded-xl hover:opacity-90 flex items-center gap-2 text-sm disabled:opacity-60"
+          >
+            {pinSaving ? <Loader2 size={14} className="animate-spin" /> : null}
+            PIN Change Karein
+          </button>
+        </div>
+
+        {/* d) Add/Edit Mobile */}
+        <div className="border-t border-border pt-6 space-y-3">
+          <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+            📱 Mobile Number Jodein / Badlein
+          </h4>
+          <div>
+            <label
+              htmlFor="sec-admin-mobile"
+              className="block text-xs font-medium text-muted-foreground mb-1"
+            >
+              Admin Mobile Number
+            </label>
+            <input
+              id="sec-admin-mobile"
+              data-ocid="admin.input"
+              type="tel"
+              value={adminMobileProfile}
+              onChange={(e) => setAdminMobileProfile(e.target.value)}
+              placeholder="Apna mobile number daalein"
+              className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Yeh aapka personal contact number hai
+            </p>
+          </div>
+          <button
+            type="button"
+            data-ocid="admin.save_button"
+            disabled={mobileSaving}
+            onClick={() => {
+              setMobileSaving(true);
+              setTimeout(() => {
+                localStorage.setItem("dz_admin_mobile", adminMobileProfile);
+                toast.success("Mobile number save ho gaya!");
+                setMobileSaving(false);
+              }, 300);
+            }}
+            className="bg-primary text-primary-foreground font-bold px-5 py-2.5 rounded-xl hover:opacity-90 flex items-center gap-2 text-sm disabled:opacity-60"
+          >
+            {mobileSaving ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : null}
+            Mobile Save Karein
+          </button>
+        </div>
       </div>
 
       {/* Social Links */}
@@ -2867,6 +3218,279 @@ function AdsManager() {
   );
 }
 
+// ---- Social Media Section ----
+function SocialMediaSection() {
+  const [settings, setSettings] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("dz_social_settings") ?? "{}");
+    } catch {
+      return {};
+    }
+  });
+  const [saved, setSaved] = useState(false);
+
+  const platforms = [
+    { key: "facebook", label: "Facebook", icon: <Facebook size={18} /> },
+    { key: "instagram", label: "Instagram", icon: <Instagram size={18} /> },
+    { key: "whatsapp", label: "WhatsApp", icon: <Share2 size={18} /> },
+    { key: "youtube", label: "YouTube", icon: <Youtube size={18} /> },
+  ];
+
+  const handleToggle = (key: string) => {
+    setSettings((prev: Record<string, unknown>) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  const handleUrl = (key: string, val: string) => {
+    setSettings((prev: Record<string, unknown>) => ({
+      ...prev,
+      [`${key}Url`]: val,
+    }));
+  };
+
+  const handleSave = () => {
+    localStorage.setItem("dz_social_settings", JSON.stringify(settings));
+    setSaved(true);
+    toast.success("Social Media settings save ho gayi!");
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-white rounded-2xl border border-border shadow-card p-6 space-y-4">
+        <h3 className="font-heading font-semibold text-foreground">
+          Social Media Links ON/OFF
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Jab aap kisi platform ko ON karenge, woh icon homepage par dikhega.
+        </p>
+        {platforms.map((p) => (
+          <div
+            key={p.key}
+            className="border border-border rounded-xl p-4 space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-semibold text-sm">
+                {p.icon} {p.label}
+              </div>
+              <button
+                type="button"
+                data-ocid="admin.toggle"
+                onClick={() => handleToggle(p.key)}
+                className={`flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg transition-all ${
+                  settings[p.key]
+                    ? "bg-green-100 text-green-700 hover:bg-green-200"
+                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                }`}
+              >
+                {settings[p.key] ? (
+                  <ToggleRight size={18} />
+                ) : (
+                  <ToggleLeft size={18} />
+                )}
+                {settings[p.key] ? "ON" : "OFF"}
+              </button>
+            </div>
+            {settings[p.key] && (
+              <input
+                data-ocid="admin.input"
+                type="url"
+                placeholder={`${p.label} profile URL (optional)`}
+                value={(settings[`${p.key}Url`] as string) ?? ""}
+                onChange={(e) => handleUrl(p.key, e.target.value)}
+                className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            )}
+          </div>
+        ))}
+        <button
+          type="button"
+          data-ocid="admin.primary_button"
+          onClick={handleSave}
+          className={`w-full py-3 rounded-xl font-bold text-sm transition-colors ${
+            saved
+              ? "bg-green-500 text-white"
+              : "bg-primary text-primary-foreground hover:opacity-90"
+          }`}
+        >
+          {saved ? "✓ Saved!" : "Save Social Media Settings"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---- Affiliate Marketing Section ----
+function AffiliateMarketingSection() {
+  const [settings, setSettings] = useState(() => {
+    try {
+      const raw = localStorage.getItem("dz_affiliate_settings");
+      if (!raw)
+        return {
+          enabled: false,
+          title: "Affiliate Marketing",
+          description: "Paisa kamao Digital Zindagi se!",
+          link: "",
+        };
+      return JSON.parse(raw);
+    } catch {
+      return {
+        enabled: false,
+        title: "Affiliate Marketing",
+        description: "Paisa kamao Digital Zindagi se!",
+        link: "",
+      };
+    }
+  });
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = () => {
+    localStorage.setItem("dz_affiliate_settings", JSON.stringify(settings));
+    setSaved(true);
+    toast.success("Affiliate Marketing settings save ho gayi!");
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-white rounded-2xl border border-border shadow-card p-6 space-y-5">
+        <div className="flex items-center justify-between">
+          <h3 className="font-heading font-semibold text-foreground">
+            Affiliate Marketing
+          </h3>
+          <button
+            type="button"
+            data-ocid="admin.toggle"
+            onClick={() =>
+              setSettings((prev: typeof settings) => ({
+                ...prev,
+                enabled: !prev.enabled,
+              }))
+            }
+            className={`flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg transition-all ${
+              settings.enabled
+                ? "bg-green-100 text-green-700 hover:bg-green-200"
+                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+            }`}
+          >
+            {settings.enabled ? (
+              <ToggleRight size={18} />
+            ) : (
+              <ToggleLeft size={18} />
+            )}
+            {settings.enabled ? "ON (Homepage par dikhega)" : "OFF"}
+          </button>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          ON karne par homepage par ek promotional banner dikhega jahan users
+          affiliate link join kar sakte hain.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <label
+              htmlFor="aff-title"
+              className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 block"
+            >
+              Banner Title
+            </label>
+            <input
+              id="aff-title"
+              data-ocid="admin.input"
+              type="text"
+              placeholder="Affiliate Marketing"
+              value={settings.title}
+              onChange={(e) =>
+                setSettings((prev: typeof settings) => ({
+                  ...prev,
+                  title: e.target.value,
+                }))
+              }
+              className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="aff-desc"
+              className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 block"
+            >
+              Description
+            </label>
+            <textarea
+              id="aff-desc"
+              data-ocid="admin.input"
+              placeholder="Paisa kamao Digital Zindagi se!"
+              value={settings.description}
+              onChange={(e) =>
+                setSettings((prev: typeof settings) => ({
+                  ...prev,
+                  description: e.target.value,
+                }))
+              }
+              rows={2}
+              className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring resize-none"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="aff-link"
+              className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 block"
+            >
+              Join Link (URL)
+            </label>
+            <input
+              id="aff-link"
+              data-ocid="admin.input"
+              type="url"
+              placeholder="https://..."
+              value={settings.link}
+              onChange={(e) =>
+                setSettings((prev: typeof settings) => ({
+                  ...prev,
+                  link: e.target.value,
+                }))
+              }
+              className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+        </div>
+        {settings.enabled && (
+          <div className="bg-gradient-to-r from-emerald-600 to-green-500 rounded-2xl p-4 text-white">
+            <p className="text-xs font-semibold uppercase tracking-wide opacity-80 mb-1">
+              Preview (Homepage par aise dikhega)
+            </p>
+            <p className="font-bold text-lg">
+              {settings.title || "Affiliate Marketing"}
+            </p>
+            <p className="text-sm opacity-90 mt-1">
+              {settings.description || "Paisa kamao Digital Zindagi se!"}
+            </p>
+            <button
+              type="button"
+              className="mt-3 bg-white text-emerald-700 text-xs font-bold px-4 py-1.5 rounded-xl"
+            >
+              Join Now →
+            </button>
+          </div>
+        )}
+        <button
+          type="button"
+          data-ocid="admin.primary_button"
+          onClick={handleSave}
+          className={`w-full py-3 rounded-xl font-bold text-sm transition-colors ${
+            saved
+              ? "bg-green-500 text-white"
+              : "bg-primary text-primary-foreground hover:opacity-90"
+          }`}
+        >
+          {saved ? "✓ Saved!" : "Save Affiliate Settings"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ---- Main Admin Dashboard ----
 export default function AdminDashboardPage() {
   const { user } = useAuth();
@@ -2943,6 +3567,16 @@ export default function AdminDashboardPage() {
       icon: <MessageCircle size={18} />,
       managerVisible: true,
     },
+    {
+      key: "socialMedia" as AdminSection,
+      label: "Social Media",
+      icon: <Share2 size={18} />,
+    },
+    {
+      key: "affiliateMarketing" as AdminSection,
+      label: "Affiliate Marketing",
+      icon: <TrendingUp size={18} />,
+    },
   ];
 
   const NAV_ITEMS = isManager
@@ -2991,6 +3625,10 @@ export default function AdminDashboardPage() {
         return <AdsManager />;
       case "chat" as AdminSection:
         return <ChatSection />;
+      case "socialMedia" as AdminSection:
+        return <SocialMediaSection />;
+      case "affiliateMarketing" as AdminSection:
+        return <AffiliateMarketingSection />;
       default:
         return <UserManagement />;
     }

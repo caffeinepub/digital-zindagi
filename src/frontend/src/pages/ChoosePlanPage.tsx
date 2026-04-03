@@ -143,7 +143,7 @@ export default function ChoosePlanPage() {
                 className="w-full bg-primary text-primary-foreground font-bold py-3 rounded-2xl hover:opacity-90 transition-all flex items-center justify-center gap-2 text-sm shadow-md"
               >
                 <Crown size={16} />
-                Premium Plan Lein
+                Subscription Lege
               </button>
             </div>
           </motion.div>
@@ -207,7 +207,7 @@ export default function ChoosePlanPage() {
                 ) : (
                   <Tv2 size={16} />
                 )}
-                {loading === "free" ? "Processing..." : "Free Plan Chalega"}
+                {loading === "free" ? "Processing..." : "Ads Dekhe"}
               </button>
             </div>
           </motion.div>

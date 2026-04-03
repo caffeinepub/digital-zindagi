@@ -5,6 +5,7 @@ import {
   LogIn,
   LogOut,
   Settings,
+  Share2,
   ShoppingBag,
   Store,
   User,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect } from "react";
+import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
 import { useLanguage } from "../contexts/LanguageContext";
 import { Link, useNavigate } from "../lib/router";
@@ -38,6 +40,32 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     logout();
     onClose();
     navigate("/");
+  };
+
+  const handleShareApp = async () => {
+    const appUrl = window.location.origin;
+    const shareData = {
+      title: "Digital Zindagi",
+      text: "Apke sheher ka digital bazaar — providers aur customers ek jagah!",
+      url: appUrl,
+    };
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch {
+        // User cancelled or error — fallback to clipboard
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(appUrl);
+        toast.success("App ka link copy ho gaya! 📋", {
+          description: appUrl,
+        });
+      } catch {
+        toast.error("Link copy nahi ho saka");
+      }
+    }
+    onClose();
   };
 
   const isManager = user?.role === "manager";
@@ -156,6 +184,17 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                   {link.label}
                 </Link>
               ))}
+
+              {/* Share App Button */}
+              <button
+                type="button"
+                data-ocid="sidebar.share_button"
+                onClick={handleShareApp}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl text-white/85 hover:text-white hover:bg-white/10 transition-colors text-sm font-medium w-full text-left"
+              >
+                <Share2 size={18} />
+                Share App
+              </button>
 
               {user && (
                 <button

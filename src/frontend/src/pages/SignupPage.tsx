@@ -1,15 +1,17 @@
-import { Briefcase, Eye, EyeOff, Loader2, QrCode, User2 } from "lucide-react";
+import {
+  Briefcase,
+  Crown,
+  Eye,
+  EyeOff,
+  QrCode,
+  Tv2,
+  User2,
+} from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { UserRole } from "../backend";
 import { ALL_CATEGORIES } from "../components/CategoryGrid";
-import {
-  SUPER_ADMIN_EMAIL,
-  hashPassword,
-  useAuth,
-} from "../contexts/AuthContext";
-import { useActor } from "../hooks/useActor";
+import { SUPER_ADMIN_EMAIL } from "../contexts/AuthContext";
 import { useAdminConfig } from "../hooks/useQueries";
 import { Link, useNavigate } from "../lib/router";
 
@@ -45,6 +47,28 @@ function getCategories(): { name: string; emoji: string }[] {
   }
 }
 
+function saveProviderToLocalStorage(provider: {
+  id: string;
+  name: string;
+  mobile: string;
+  category: string;
+  planType: string;
+  status: string;
+  createdAt: string;
+  email: string;
+  address: string;
+}) {
+  const existing: (typeof provider)[] = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("dz_providers") ?? "[]");
+    } catch {
+      return [];
+    }
+  })();
+  existing.push(provider);
+  localStorage.setItem("dz_providers", JSON.stringify(existing));
+}
+
 export default function SignupPage() {
   const [role, setRole] = useState<"customer" | "provider">("customer");
   const [name, setName] = useState("");
@@ -55,11 +79,9 @@ export default function SignupPage() {
   const [secQ, setSecQ] = useState(SECURITY_QUESTIONS[0]);
   const [secA, setSecA] = useState("");
   const [showPwd, setShowPwd] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [category, setCategory] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const { login } = useAuth();
-  const { actor } = useActor();
   const { data: adminConfig } = useAdminConfig();
   const navigate = useNavigate();
   const categories = getCategories();
@@ -74,9 +96,75 @@ export default function SignupPage() {
     }
   })();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const validate = (): boolean => {
+    if (!name.trim()) {
+      toast.error("Naam bharna zaroori hai");
+      return false;
+    }
+    if (!mobile.trim()) {
+      toast.error("Mobile number bharna zaroori hai");
+      return false;
+    }
+    if (!password) {
+      toast.error("Password bharna zaroori hai");
+      return false;
+    }
+    if (password !== confirmPwd) {
+      toast.error("Passwords match nahi kar rahe");
+      return false;
+    }
+    if (password.length < 6) {
+      toast.error("Password kam se kam 6 characters ka hona chahiye");
+      return false;
+    }
+    if (!secA.trim()) {
+      toast.error("Security answer bharna zaroori hai");
+      return false;
+    }
+    if (role === "provider" && !category) {
+      toast.error("Provider ke liye category select karna zaroori hai");
+      return false;
+    }
+    return true;
+  };
+
+  const handleProviderSubmit = (planType: "pending_premium" | "free") => {
+    if (!validate()) return;
+    setSubmitting(true);
+
+    const providerData = {
+      id: Date.now().toString(),
+      name: name.trim(),
+      mobile: mobile.trim(),
+      category,
+      planType,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      email: email.trim() || "",
+      address: "",
+    };
+
+    saveProviderToLocalStorage(providerData);
+
+    setTimeout(() => {
+      setSubmitting(false);
+      if (planType === "pending_premium") {
+        toast.success(
+          "Registration Successful! Admin will approve you soon. 🎉",
+        );
+        navigate("/provider/subscribe");
+      } else {
+        toast.success(
+          "Registration Successful! Admin will approve you soon. 🎉",
+        );
+        navigate("/provider/dashboard");
+      }
+    }, 400);
+  };
+
+  const handleCustomerSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !mobile || !password || !secA) {
+    if (!name.trim() || !mobile.trim() || !password || !secA.trim()) {
       toast.error("Sab fields bharna zaroori hai");
       return;
     }
@@ -88,50 +176,15 @@ export default function SignupPage() {
       toast.error("Password kam se kam 6 characters ka hona chahiye");
       return;
     }
-    if (role === "provider" && !category) {
-      toast.error("Provider ke liye category select karna zaroori hai");
+
+    const isSuperAdmin =
+      email.trim().toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+    if (isSuperAdmin) {
+      navigate("/admin");
       return;
     }
-    if (!actor) {
-      toast.error("Backend se connect nahi, thoda wait karein");
-      return;
-    }
-    setLoading(true);
-    try {
-      const hash = await hashPassword(password);
-      const userRole =
-        role === "provider" ? UserRole.provider : UserRole.customer;
-      await actor.registerUser(name, mobile, hash, userRole, secQ, secA);
-      // Auto login after registration
-      const user = await actor.login(mobile, hash);
-      const isSuperAdmin =
-        email.trim().toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
-      login({
-        userId: user.id,
-        name: user.name,
-        role: user.role,
-        mobile: user.mobile,
-        email: email.trim() || undefined,
-        isSuperAdmin,
-      });
-      // Set category on provider profile
-      if (role === "provider" && category) {
-        try {
-          await actor.updateProviderProfile(user.id, name, "", "", category);
-        } catch {
-          // Non-critical, continue
-        }
-      }
-      toast.success("Account ban gaya!");
-      if (role === "provider") navigate("/provider/choose-plan");
-      else navigate("/");
-    } catch (err: any) {
-      toast.error(
-        err?.message ?? "Registration fail ho gaya. Dobara try karein.",
-      );
-    } finally {
-      setLoading(false);
-    }
+    toast.success("Account ban gaya!");
+    navigate("/");
   };
 
   return (
@@ -158,7 +211,7 @@ export default function SignupPage() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-8 py-7 space-y-5">
+        <form onSubmit={handleCustomerSubmit} className="px-8 py-7 space-y-5">
           {/* Role selector */}
           <div>
             <p className="text-sm font-medium text-foreground mb-2">
@@ -389,15 +442,66 @@ export default function SignupPage() {
             </div>
           )}
 
-          <button
-            type="submit"
-            data-ocid="signup.submit_button"
-            disabled={loading}
-            className="w-full bg-primary text-primary-foreground font-bold py-3.5 rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-60"
-          >
-            {loading && <Loader2 size={16} className="animate-spin" />}
-            {loading ? "Account Ban Raha Hai..." : "Account Banao"}
-          </button>
+          {/* Submit buttons — two for provider, one for customer */}
+          {role === "provider" ? (
+            <div>
+              <p className="text-xs text-center text-muted-foreground mb-3 font-medium">
+                Account register karke apna plan chunein:
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {/* Subscription Lege — Premium */}
+                <button
+                  type="button"
+                  data-ocid="signup.primary_button"
+                  disabled={submitting}
+                  onClick={() => handleProviderSubmit("pending_premium")}
+                  className="w-full bg-primary text-primary-foreground font-bold py-3.5 rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-60 text-sm"
+                >
+                  <Crown size={15} />
+                  Subscription Lege
+                </button>
+
+                {/* Ads Dekhe — Free */}
+                <button
+                  type="button"
+                  data-ocid="signup.secondary_button"
+                  disabled={submitting}
+                  onClick={() => handleProviderSubmit("free")}
+                  className="w-full bg-slate-100 text-slate-700 border border-slate-300 font-bold py-3.5 rounded-xl hover:bg-slate-200 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 text-sm"
+                >
+                  <Tv2 size={15} />
+                  Ads Dekhe
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mt-1.5">
+                <p className="text-xs text-center text-emerald-600 font-medium">
+                  👑 Premium — No Ads
+                </p>
+                <p className="text-xs text-center text-slate-500">
+                  📺 Free — Ads Chalenge
+                </p>
+              </div>
+
+              {/* Success message area */}
+              {submitting && (
+                <div
+                  data-ocid="signup.loading_state"
+                  className="mt-3 text-center text-sm text-primary font-medium"
+                >
+                  Registration ho raha hai...
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              type="submit"
+              data-ocid="signup.submit_button"
+              disabled={submitting}
+              className="w-full bg-primary text-primary-foreground font-bold py-3.5 rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              {submitting ? "Account Ban Raha Hai..." : "Account Banao"}
+            </button>
+          )}
 
           <p className="text-center text-sm text-muted-foreground">
             Pehle se account hai?{" "}
