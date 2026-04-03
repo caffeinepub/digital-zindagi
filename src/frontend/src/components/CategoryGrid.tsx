@@ -1,7 +1,7 @@
 import { motion } from "motion/react";
 import { Link } from "../lib/router";
 
-const ALL_CATEGORIES = [
+export const ALL_CATEGORIES = [
   {
     name: "Scrap",
     hinglish: "Kabadiwala",

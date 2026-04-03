@@ -1,37 +1,41 @@
-# Digital Zindagi - V63: Admin Identity & Save Fix
+# Digital Zindagi — V66: Revenue & Icon Fix
 
 ## Current State
-- Super Admin email `sushhilkumar651@gmail.com` is recognized via AuthContext but admin panel still requires PIN via sessionStorage flag
-- Category Manager (HomepageControls) shows prices inline but has NO individual Save button; price changes auto-save to localStorage on input change (no explicit confirmation)
-- Admin sidebar nav order: Users, Search, Approvals, Controls, Banners, Settings, Pricing, Staff, Ads, Chat — Founder Branding is buried inside Settings section, no dedicated Category Manager section at top
-- Settings save shows toast but no green tick visual confirmation
-- Admin panel accessed via PIN gate (`/admin/pin`) which requires 5-tap gesture + PIN
+- CategoryManagerSection: has a simple text input for icon, single price field, per-category Save button
+- Backend supports 3 subscription plans: oneMonth, threeMonths, twelveMonths
+- CategoryRow: shows name, ON/OFF toggle, price input, AdMob toggle missing, no 2-month/6-month pricing
+- HomePage CategoryGrid: hardcoded ALL_CATEGORIES list; only shows toggle-enabled categories from backend; not synced with admin-added categories
+- SubscriptionPricingSection: exists as a separate admin section with 3 plan fields
+- Provider Bano banner: static text, no dynamic pricing shown
+- ProviderSubscribePage: uses 3 plan system (oneMonth, threeMonths, twelveMonths) from backend
 
 ## Requested Changes (Diff)
 
 ### Add
-- Per-category `Save Changes` button in HomepageControls; saves price, ON/OFF status, and AdMob settings to localStorage permanently
-- Green tick checkmark + "Settings Saved!" visual confirmation banner (appears for 3 seconds on any save action)
-- Dedicated `founder` and `categoryManager` admin nav sections placed at top of sidebar nav
-- Super Admin bypass: if `isSuperAdmin` is true, skip PIN gate entirely (direct access to admin dashboard)
+- Emoji picker panel in "Naya Category Add Karein" section: click on icon field opens a grid of common emojis to pick from
+- Per-category subscription pricing: 4 plan price fields per category row (1M, 2M, 6M, 12M)
+- AdMob toggle per category row
+- "Save All Changes" button at bottom of Category Manager page
+- All 12 hardcoded homepage categories also appear in Category Manager as manageable rows (same list, admin can toggle ON/OFF, set prices, set AdMob)
+- Home Sync: ProviderSubscribePage reads category-specific pricing from localStorage (set via Category Manager)
+- Super Admin identity re-verification: sushhilkumar651@gmail.com always gets adminVerified=true
 
 ### Modify
-- Admin nav order: Founder Settings and Category Manager moved to top positions (1st and 2nd)
-- Every save action triggers visible green confirmation UI (not just toast)
-- HomepageControls: each category row gets its own `Save Changes` button that explicitly writes to localStorage
-- AdminPinPage: if user is already logged in as Super Admin, redirect directly to `/admin` without PIN
-- AuthContext: on login, Super Admin email auto-grants `adminVerified` in sessionStorage
+- CategoryRow: add 4 price inputs (1M, 2M, 6M, 12M), add AdMob toggle, expand save logic to include all 4 prices
+- CategoryManagerSection: merge hardcoded ALL_CATEGORIES with backend toggles so all 12 default categories appear in the list; use emoji picker instead of text input
+- Storage key: save per-category prices as `dz_cat_prices_<categoryName>` with {m1, m2, m6, m12} structure
+- handleCategorySave: save all 4 price tiers + admob toggle to localStorage
+- ProviderSubscribePage: read pricing from localStorage per-category (fallback to backend global pricing)
+- HomePage Provider Bano banner: show lowest active price from localStorage
 
 ### Remove
-- No items removed; existing features preserved
+- Nothing removed
 
 ## Implementation Plan
-1. Update `AdminPinPage.tsx`: if Super Admin is already logged in, auto-set `adminVerified` and redirect to `/admin`
-2. Update `AuthContext.tsx`: when Super Admin logs in, set `sessionStorage.setItem('adminVerified', 'true')` automatically
-3. Update `AdminDashboardPage.tsx`:
-   a. Add `founder` and `categoryManager` as new AdminSection types at top of nav
-   b. Reorder NAV_ITEMS to put Founder Settings and Category Manager first
-   c. Rename/extract Founder Branding into its own section component `FounderSettingsSection`
-   d. Rename HomepageControls → CategoryManagerSection, add per-row Save button
-   e. Add `SaveConfirmation` inline component — green tick + "Settings Saved!" fading banner
-   f. Wire SaveConfirmation to all save handlers across the dashboard
+1. Add EMOJI_LIST constant and EmojiPicker inline component in AdminDashboardPage
+2. Update CategoryManagerSection to merge ALL_CATEGORIES (from CategoryGrid) with backend toggles so all 12 default categories are always shown
+3. Update CategoryRow interface and component: add price4 fields (m1Price, m2Price, m6Price, m12Price), adMobOn toggle, rename onSave signature
+4. Add global "Save All Changes" button at bottom that iterates all categories and saves them at once
+5. Update storage logic: dz_cat_prices_{name} = {m1, m2, m6, m12, adMob, isOn}
+6. Update ProviderSubscribePage to read category-specific pricing if category param is available, else fall back to global pricing
+7. Re-verify Super Admin identity in AdminPinPage and AuthContext

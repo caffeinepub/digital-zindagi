@@ -868,38 +868,163 @@ function FounderSettingsSection() {
 }
 
 // ---- Category Manager Section ----
+
+// Default categories matching CategoryGrid
+const DEFAULT_CATEGORIES = [
+  { name: "Scrap", hinglish: "Kabadiwala", emoji: "♻️" },
+  { name: "Doctor", hinglish: "Online Doctor", emoji: "🏥" },
+  { name: "Market", hinglish: "Local Market", emoji: "🛒" },
+  { name: "Labor", hinglish: "Expert Labor", emoji: "👷" },
+  { name: "Electronics", hinglish: "Electronics", emoji: "📱" },
+  { name: "Plumber", hinglish: "Plumber", emoji: "🔧" },
+  { name: "Carpenter", hinglish: "Carpenter", emoji: "🪚" },
+  { name: "Tutor", hinglish: "Online Tutor", emoji: "📚" },
+  { name: "Electrician", hinglish: "Electrician", emoji: "⚡" },
+  { name: "Painter", hinglish: "Painter", emoji: "🎨" },
+  { name: "Tailor", hinglish: "Darzi", emoji: "✂️" },
+  { name: "Salon", hinglish: "Salon", emoji: "💇" },
+];
+
+// Emoji picker options for category icon selection
+const EMOJI_OPTIONS = [
+  "🗑️",
+  "🩺",
+  "🛒",
+  "👷",
+  "📱",
+  "🔧",
+  "🪚",
+  "📚",
+  "⚡",
+  "🎨",
+  "✂️",
+  "💇",
+  "🏪",
+  "🚿",
+  "🍕",
+  "🚗",
+  "🏠",
+  "🌿",
+  "💊",
+  "🔌",
+  "🪣",
+  "🛠️",
+  "🌾",
+  "🎭",
+  "👗",
+  "🐄",
+  "🌻",
+  "🏋️",
+  "🧹",
+  "🍽️",
+  "♻️",
+  "🏥",
+  "💼",
+  "🎓",
+  "🏗️",
+  "🚜",
+  "🧴",
+  "🪴",
+  "🎯",
+  "🛵",
+];
+
+interface EmojiPickerProps {
+  value: string;
+  onChange: (emoji: string) => void;
+}
+
+function EmojiPicker({ value, onChange }: EmojiPickerProps) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        data-ocid="admin.toggle"
+        onClick={() => setOpen((p) => !p)}
+        className="w-12 h-10 border border-border rounded-xl text-xl flex items-center justify-center hover:bg-accent transition-colors"
+        title="Icon chunein"
+      >
+        {value}
+      </button>
+      {open && (
+        <div className="absolute top-12 left-0 z-50 bg-white border border-border rounded-2xl shadow-xl p-3 w-64">
+          <p className="text-xs text-muted-foreground mb-2 font-medium">
+            Icon select karein:
+          </p>
+          <div className="grid grid-cols-8 gap-1">
+            {EMOJI_OPTIONS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => {
+                  onChange(emoji);
+                  setOpen(false);
+                }}
+                className={`w-7 h-7 text-base rounded-lg hover:bg-accent flex items-center justify-center transition-colors ${emoji === value ? "bg-primary/20 ring-1 ring-primary" : ""}`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CategoryManagerSection() {
   const { data: toggles, isLoading } = useAllToggles();
   const updateToggle = useUpdateToggle();
   const { user } = useAuth();
   const isManager = user?.role === "manager";
   const [showSaved, setShowSaved] = useState(false);
+  const [triggerSaveAll, setTriggerSaveAll] = useState(0);
 
-  // Category prices: per-category saved state
-  const [prices, setPrices] = useState<Record<string, string>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("dz_category_prices") ?? "{}");
-    } catch {
-      return {};
-    }
-  });
-
-  const handleCategorySave = (name: string, isOn: boolean) => {
-    // Save price + ON/OFF status permanently
-    const updated = { ...prices };
-    localStorage.setItem("dz_category_prices", JSON.stringify(updated));
-    // Also save per-category on/off state
-    const statusMap: Record<string, boolean> = (() => {
+  // Build merged category list: defaults + user-added
+  const allCategories = (() => {
+    const extra: { name: string; hinglish: string; emoji: string }[] = (() => {
       try {
-        return JSON.parse(localStorage.getItem("dz_category_status") ?? "{}");
+        const stored = JSON.parse(
+          localStorage.getItem("dz_approved_categories") ?? "[]",
+        ) as { name: string; icon: string; status: string }[];
+        const defaultNames = new Set(
+          DEFAULT_CATEGORIES.map((c) => c.name.toLowerCase()),
+        );
+        return stored
+          .filter((c) => !defaultNames.has(c.name.toLowerCase()))
+          .map((c) => ({
+            name: c.name,
+            hinglish: c.name,
+            emoji: c.icon ?? "🏪",
+          }));
       } catch {
-        return {};
+        return [];
       }
     })();
-    statusMap[name] = isOn;
-    localStorage.setItem("dz_category_status", JSON.stringify(statusMap));
+    return [...DEFAULT_CATEGORIES, ...extra];
+  })();
+
+  // Get toggle value for a category (from backend or localStorage)
+  const getToggleValue = (name: string): boolean => {
+    if (toggles) {
+      const found = toggles.find(([k]) => k === name);
+      if (found !== undefined) return found[1];
+    }
+    try {
+      const statusMap = JSON.parse(
+        localStorage.getItem("dz_category_status") ?? "{}",
+      );
+      return statusMap[name] ?? true;
+    } catch {
+      return true;
+    }
+  };
+
+  const handleSaveAll = () => {
+    setTriggerSaveAll((n) => n + 1);
     setShowSaved(true);
-    toast.success(`"${name}" save ho gayi!`);
+    toast.success("Saari categories save ho gayi!");
     setTimeout(() => setShowSaved(false), 3000);
   };
 
@@ -976,15 +1101,8 @@ function CategoryManagerSection() {
             ? "Naya Category Request Bhejein (Pending)"
             : "Naya Category Add Karein"}
         </h3>
-        <div className="flex gap-2">
-          <input
-            data-ocid="admin.input"
-            type="text"
-            value={newCatIcon}
-            onChange={(e) => setNewCatIcon(e.target.value)}
-            placeholder="Icon"
-            className="w-16 border border-border rounded-xl px-3 py-2.5 text-sm text-center outline-none"
-          />
+        <div className="flex gap-2 items-center">
+          <EmojiPicker value={newCatIcon} onChange={setNewCatIcon} />
           <input
             data-ocid="admin.input"
             type="text"
@@ -1011,18 +1129,18 @@ function CategoryManagerSection() {
         )}
       </div>
 
-      {/* Category List with Save Buttons */}
+      {/* Category List with Full Subscription Row */}
       <div className="bg-white rounded-2xl border border-border shadow-card overflow-hidden">
         <div className="px-5 py-4 border-b border-border">
           <h3 className="font-semibold text-foreground">
-            Categories — Price, Status &amp; AdMob
+            Categories — Price (4 Plans), Status &amp; AdMob
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Har category mein price set karein, ON/OFF karein, phir "Save"
-            dabayein.
+            Har category mein 4 plan prices set karein, ON/OFF karein, phir
+            "Save" dabayein.
           </p>
         </div>
-        {!toggles || toggles.length === 0 ? (
+        {allCategories.length === 0 ? (
           <div
             data-ocid="admin.empty_state"
             className="text-center py-12 text-muted-foreground"
@@ -1030,60 +1148,148 @@ function CategoryManagerSection() {
             Koi category nahi mila
           </div>
         ) : (
-          toggles.map(([name, value], i) => (
+          allCategories.map((cat, i) => (
             <CategoryRow
-              key={name}
+              key={cat.name}
               index={i}
-              name={name}
-              isOn={value}
-              initialPrice={prices[name] ?? ""}
+              name={cat.name}
+              emoji={cat.emoji}
+              isOn={getToggleValue(cat.name)}
               isManager={isManager}
-              onSave={(price, isOn) => {
-                const updated = { ...prices, [name]: price };
-                setPrices(updated);
-                if (!isManager) updateToggle.mutate({ name, value: isOn });
-                handleCategorySave(name, isOn);
+              triggerSaveAll={triggerSaveAll}
+              onSave={(data) => {
+                if (!isManager) {
+                  updateToggle.mutate({ name: cat.name, value: data.isOn });
+                }
+                // Persist status map
+                const statusMap: Record<string, boolean> = (() => {
+                  try {
+                    return JSON.parse(
+                      localStorage.getItem("dz_category_status") ?? "{}",
+                    );
+                  } catch {
+                    return {};
+                  }
+                })();
+                statusMap[cat.name] = data.isOn;
+                localStorage.setItem(
+                  "dz_category_status",
+                  JSON.stringify(statusMap),
+                );
+                setShowSaved(true);
+                toast.success(`"${cat.name}" save ho gayi!`);
+                setTimeout(() => setShowSaved(false), 3000);
               }}
               onToggle={(val) => {
-                if (!isManager) updateToggle.mutate({ name, value: val });
+                if (!isManager)
+                  updateToggle.mutate({ name: cat.name, value: val });
               }}
             />
           ))
         )}
       </div>
+
+      {/* Global Save All Button */}
+      {!isManager && (
+        <div className="pt-2">
+          <button
+            type="button"
+            data-ocid="admin.save_button"
+            onClick={handleSaveAll}
+            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-2xl text-base flex items-center justify-center gap-2 transition-colors shadow-md"
+          >
+            <CheckCircle size={20} />
+            Save All Changes — Saari Categories Save Karein
+          </button>
+        </div>
+      )}
     </div>
   );
+}
+
+interface CategoryRowData {
+  m1: string;
+  m2: string;
+  m6: string;
+  m12: string;
+  adMob: boolean;
+  isOn: boolean;
 }
 
 interface CategoryRowProps {
   index: number;
   name: string;
+  emoji: string;
   isOn: boolean;
-  initialPrice: string;
   isManager: boolean;
-  onSave: (price: string, isOn: boolean) => void;
+  triggerSaveAll: number;
+  onSave: (data: CategoryRowData) => void;
   onToggle: (val: boolean) => void;
 }
 
 function CategoryRow({
   index,
   name,
+  emoji,
   isOn,
-  initialPrice,
   isManager,
+  triggerSaveAll,
   onSave,
   onToggle,
 }: CategoryRowProps) {
-  const [price, setPrice] = useState(initialPrice);
-  const [localOn, setLocalOn] = useState(isOn);
+  const storageKey = `dz_cat_row_${name}`;
+
+  const loadStored = (): CategoryRowData => {
+    try {
+      const d = JSON.parse(localStorage.getItem(storageKey) ?? "{}");
+      return {
+        m1: d.m1 ?? "",
+        m2: d.m2 ?? "",
+        m6: d.m6 ?? "",
+        m12: d.m12 ?? "",
+        adMob: d.adMob ?? false,
+        isOn: d.isOn ?? isOn,
+      };
+    } catch {
+      return { m1: "", m2: "", m6: "", m12: "", adMob: false, isOn };
+    }
+  };
+
+  const initial = loadStored();
+  const [m1, setM1] = useState(initial.m1);
+  const [m2, setM2] = useState(initial.m2);
+  const [m6, setM6] = useState(initial.m6);
+  const [m12, setM12] = useState(initial.m12);
+  const [adMob, setAdMob] = useState(initial.adMob);
+  const [localOn, setLocalOn] = useState(initial.isOn);
+
+  const handleSave = () => {
+    const data: CategoryRowData = { m1, m2, m6, m12, adMob, isOn: localOn };
+    localStorage.setItem(storageKey, JSON.stringify(data));
+    onSave(data);
+  };
+
+  // Listen to global Save All trigger
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — only re-runs on triggerSaveAll change
+  useEffect(() => {
+    if (triggerSaveAll > 0) {
+      const data: CategoryRowData = { m1, m2, m6, m12, adMob, isOn: localOn };
+      localStorage.setItem(storageKey, JSON.stringify(data));
+      onSave(data);
+    }
+  }, [triggerSaveAll]);
 
   return (
     <div
       data-ocid={`admin.item.${index + 1}`}
       className="border-b border-border last:border-0 px-5 py-4 space-y-3"
     >
-      <div className="flex items-center justify-between">
-        <span className="font-medium text-foreground text-sm">{name}</span>
+      {/* Row Header: Name + ON/OFF */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">{emoji}</span>
+          <span className="font-semibold text-foreground text-sm">{name}</span>
+        </div>
         <button
           type="button"
           data-ocid={`admin.toggle.${index + 1}`}
@@ -1103,31 +1309,64 @@ function CategoryRow({
           {localOn ? "ON" : "OFF"}
         </button>
       </div>
+
+      {/* 4 Price Inputs */}
       {!isManager && (
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground font-medium">
-            Price: ₹
-          </span>
-          <input
-            data-ocid="admin.input"
-            type="number"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            placeholder="Price set karein"
-            className="w-32 border border-border rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-ring"
-          />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {[
+            { label: "1 Month", value: m1, set: setM1 },
+            { label: "2 Month", value: m2, set: setM2 },
+            { label: "6 Month", value: m6, set: setM6 },
+            { label: "12 Month", value: m12, set: setM12 },
+          ].map(({ label, value, set }) => (
+            <div key={label} className="space-y-1">
+              <span className="text-xs text-muted-foreground font-medium">
+                {label} ₹
+              </span>
+              <input
+                data-ocid="admin.input"
+                type="number"
+                value={value}
+                onChange={(e) => set(e.target.value)}
+                placeholder="Price"
+                className="w-full border border-border rounded-lg px-2.5 py-1.5 text-sm outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+          ))}
         </div>
       )}
+
+      {/* AdMob Toggle + Save Button */}
       {!isManager && (
-        <button
-          type="button"
-          data-ocid="admin.save_button"
-          onClick={() => onSave(price, localOn)}
-          className="flex items-center gap-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-bold px-4 py-1.5 rounded-lg transition-colors"
-        >
-          <CheckCircle size={13} />
-          Save Changes
-        </button>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground font-medium">
+              AdMob Ads:
+            </span>
+            <button
+              type="button"
+              data-ocid={`admin.toggle.${index + 1}`}
+              onClick={() => setAdMob((v) => !v)}
+              className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg transition-all ${
+                adMob
+                  ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+              }`}
+            >
+              {adMob ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+              {adMob ? "ON" : "OFF"}
+            </button>
+          </div>
+          <button
+            type="button"
+            data-ocid="admin.save_button"
+            onClick={handleSave}
+            className="flex items-center gap-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-bold px-4 py-1.5 rounded-lg transition-colors"
+          >
+            <CheckCircle size={13} />
+            Save Changes
+          </button>
+        </div>
       )}
     </div>
   );

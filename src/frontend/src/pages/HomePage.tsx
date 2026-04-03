@@ -1,8 +1,8 @@
 import { Leaf } from "lucide-react";
 import { motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import CategoryGrid from "../components/CategoryGrid";
+import CategoryGrid, { ALL_CATEGORIES } from "../components/CategoryGrid";
 import Footer from "../components/Footer";
 import Header from "../components/Header";
 import HeroCarousel from "../components/HeroCarousel";
@@ -71,6 +71,21 @@ export default function HomePage() {
   };
 
   const featuredProviders = providers?.slice(0, 6) ?? [];
+
+  // Read lowest 1-month price from category localStorage settings
+  const lowestPrice = useMemo(() => {
+    const prices = ALL_CATEGORIES.flatMap((cat) => {
+      try {
+        const d = JSON.parse(
+          localStorage.getItem(`dz_cat_row_${cat.name}`) ?? "{}",
+        );
+        return d.m1 ? [Number(d.m1)] : [];
+      } catch {
+        return [];
+      }
+    });
+    return prices.length > 0 ? Math.min(...prices) : null;
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -255,7 +270,9 @@ export default function HomePage() {
                   {t("registerBusiness")}
                 </h3>
                 <p className="text-white/75 text-sm">
-                  Register karo aur hazaro customers tak pahuncho. Bilkul free!
+                  {lowestPrice != null
+                    ? `Sirf ₹${lowestPrice}/maah mein apna digital shop shuru karein!`
+                    : "Register karo aur hazaro customers tak pahuncho. Bilkul free!"}
                 </p>
               </div>
               <Link

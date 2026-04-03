@@ -1,17 +1,26 @@
 import { CheckCircle, Loader2, Upload } from "lucide-react";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ExternalBlob, SubscriptionPlan } from "../backend";
+import { ALL_CATEGORIES } from "../components/CategoryGrid";
 import { useAuth } from "../contexts/AuthContext";
 import { useActor } from "../hooks/useActor";
 import { useAdminConfig, useSubscriptionPricing } from "../hooks/useQueries";
-import { Link } from "../lib/router";
+import { Link, useParams } from "../lib/router";
 
 const PLAN_LABELS: Record<string, string> = {
   oneMonth: "1 Maah",
-  threeMonths: "3 Maah",
+  twoMonths: "2 Maah",
+  sixMonths: "6 Maah",
   twelveMonths: "12 Maah",
+};
+
+const PLAN_DURATION_HINT: Record<string, string> = {
+  oneMonth: "30 din",
+  twoMonths: "60 din",
+  sixMonths: "180 din",
+  twelveMonths: "365 din",
 };
 
 const PLAN_FEATURES: Record<string, string[]> = {
@@ -21,7 +30,13 @@ const PLAN_FEATURES: Record<string, string[]> = {
     "WhatsApp button",
     "Email support",
   ],
-  threeMonths: [
+  twoMonths: [
+    "Full profile listing",
+    "Search mein dikhein",
+    "WhatsApp button",
+    "Priority listing",
+  ],
+  sixMonths: [
     "Full profile listing",
     "Search mein dikhein",
     "Priority placement",
@@ -36,8 +51,10 @@ const PLAN_FEATURES: Record<string, string[]> = {
   ],
 };
 
-function planStringToEnum(plan: string): SubscriptionPlan {
-  if (plan === "threeMonths") return SubscriptionPlan.threeMonths;
+// Map display plan keys to backend SubscriptionPlan enum
+function planToBackendEnum(plan: string): SubscriptionPlan {
+  if (plan === "twoMonths") return SubscriptionPlan.oneMonth; // closest backend plan
+  if (plan === "sixMonths") return SubscriptionPlan.threeMonths;
   if (plan === "twelveMonths") return SubscriptionPlan.twelveMonths;
   return SubscriptionPlan.oneMonth;
 }
@@ -53,12 +70,40 @@ export default function ProviderSubscribePage() {
   const { actor } = useActor();
   const { data: config } = useAdminConfig();
   const { data: pricing } = useSubscriptionPricing();
+  const params = useParams() as { category?: string };
+  const catName = params.category;
+
+  // Read category-specific pricing from localStorage (set in Category Manager)
+  const catRowData = useMemo(() => {
+    if (!catName) return null;
+    try {
+      const found = ALL_CATEGORIES.find(
+        (c) => c.name.toLowerCase() === catName.toLowerCase(),
+      );
+      const key = found ? found.name : catName;
+      return JSON.parse(localStorage.getItem(`dz_cat_row_${key}`) ?? "null");
+    } catch {
+      return null;
+    }
+  }, [catName]);
 
   const getPlanPrice = (plan: string): string => {
+    // Check category-specific price first
+    if (catRowData) {
+      if (plan === "oneMonth" && catRowData.m1) return `\u20b9${catRowData.m1}`;
+      if (plan === "twoMonths" && catRowData.m2)
+        return `\u20b9${catRowData.m2}`;
+      if (plan === "sixMonths" && catRowData.m6)
+        return `\u20b9${catRowData.m6}`;
+      if (plan === "twelveMonths" && catRowData.m12)
+        return `\u20b9${catRowData.m12}`;
+    }
+    // Fall back to global backend pricing
     if (!pricing) return "---";
-    if (plan === "oneMonth") return `₹${pricing.oneMonthPrice}`;
-    if (plan === "threeMonths") return `₹${pricing.threeMonthPrice}`;
-    if (plan === "twelveMonths") return `₹${pricing.twelveMonthPrice}`;
+    if (plan === "oneMonth") return `\u20b9${pricing.oneMonthPrice}`;
+    if (plan === "twoMonths") return `\u20b9${pricing.oneMonthPrice}`; // no dedicated backend plan
+    if (plan === "sixMonths") return `\u20b9${pricing.threeMonthPrice}`;
+    if (plan === "twelveMonths") return `\u20b9${pricing.twelveMonthPrice}`;
     return "---";
   };
 
@@ -77,7 +122,7 @@ export default function ProviderSubscribePage() {
       try {
         await actor.approveProvider(
           user.userId,
-          planStringToEnum(selectedPlan),
+          planToBackendEnum(selectedPlan),
         );
       } catch {
         // Auto-approve failed silently — admin can still manually approve
@@ -137,68 +182,82 @@ export default function ProviderSubscribePage() {
           <p className="text-white/70 text-sm mt-1">
             Plan chunein aur apna digital shop shuru karein
           </p>
+          {catName && (
+            <p className="text-white/60 text-xs mt-1">Category: {catName}</p>
+          )}
         </div>
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-8">
         {!selectedPlan ? (
           <>
-            <h2 className="font-heading font-bold text-xl text-foreground mb-6">
+            <h2 className="font-heading font-bold text-xl text-foreground mb-2">
               Plan Select Karein
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {["oneMonth", "threeMonths", "twelveMonths"].map((plan, i) => (
-                <motion.div
-                  key={plan}
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.1 }}
-                  data-ocid={`subscribe.item.${i + 1}`}
-                  className={`bg-white rounded-2xl border-2 shadow-card p-6 cursor-pointer transition-all hover:shadow-card-hover ${
-                    plan === "twelveMonths"
-                      ? "border-primary relative"
-                      : "border-border hover:border-primary/40"
-                  }`}
-                  onClick={() => setSelectedPlan(plan)}
-                >
-                  {plan === "twelveMonths" && (
-                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-full">
-                      Best Value ⭐
-                    </span>
-                  )}
-                  <h3 className="font-heading font-bold text-xl text-foreground mb-1">
-                    {PLAN_LABELS[plan]}
-                  </h3>
-                  <div className="text-3xl font-bold text-primary mb-4">
-                    {getPlanPrice(plan)}
-                  </div>
-                  <ul className="space-y-2">
-                    {PLAN_FEATURES[plan].map((f) => (
-                      <li
-                        key={f}
-                        className="flex items-center gap-2 text-sm text-muted-foreground"
-                      >
-                        <CheckCircle
-                          size={14}
-                          className="text-green-500 flex-shrink-0"
-                        />{" "}
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                  <button
-                    type="button"
-                    data-ocid={`subscribe.select_button.${i + 1}`}
-                    className="mt-6 w-full bg-primary text-primary-foreground font-bold py-2.5 rounded-xl hover:opacity-90 transition-opacity text-sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedPlan(plan);
-                    }}
+            {catRowData && (
+              <p className="text-xs text-muted-foreground mb-6">
+                ℹ️ Is category ke liye special pricing set hai (Category Manager
+                se).
+              </p>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {["oneMonth", "twoMonths", "sixMonths", "twelveMonths"].map(
+                (plan, i) => (
+                  <motion.div
+                    key={plan}
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.08 }}
+                    data-ocid={`subscribe.item.${i + 1}`}
+                    className={`bg-white rounded-2xl border-2 shadow-card p-5 cursor-pointer transition-all hover:shadow-card-hover ${
+                      plan === "twelveMonths"
+                        ? "border-primary relative"
+                        : "border-border hover:border-primary/40"
+                    }`}
+                    onClick={() => setSelectedPlan(plan)}
                   >
-                    Select Karein
-                  </button>
-                </motion.div>
-              ))}
+                    {plan === "twelveMonths" && (
+                      <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-full">
+                        Best Value ⭐
+                      </span>
+                    )}
+                    <h3 className="font-heading font-bold text-lg text-foreground mb-0.5">
+                      {PLAN_LABELS[plan]}
+                    </h3>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      {PLAN_DURATION_HINT[plan]}
+                    </p>
+                    <div className="text-2xl font-bold text-primary mb-4">
+                      {getPlanPrice(plan)}
+                    </div>
+                    <ul className="space-y-1.5 mb-4">
+                      {PLAN_FEATURES[plan].map((f) => (
+                        <li
+                          key={f}
+                          className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                        >
+                          <CheckCircle
+                            size={12}
+                            className="text-green-500 flex-shrink-0"
+                          />
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      type="button"
+                      data-ocid={`subscribe.select_button.${i + 1}`}
+                      className="mt-auto w-full bg-primary text-primary-foreground font-bold py-2 rounded-xl hover:opacity-90 transition-opacity text-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedPlan(plan);
+                      }}
+                    >
+                      Select Karein
+                    </button>
+                  </motion.div>
+                ),
+              )}
             </div>
           </>
         ) : (
