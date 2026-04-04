@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  BookOpen,
   CheckCircle,
   CheckSquare,
   DollarSign,
@@ -62,7 +63,8 @@ type AdminSection =
   | "settings"
   | "pricing"
   | "staff"
-  | "ads";
+  | "ads"
+  | "ebookManager";
 
 const DEFAULT_EMERALD = "#059669";
 
@@ -696,6 +698,9 @@ function ProviderApprovals() {
 
   return (
     <div className="space-y-6">
+      {/* eBook Purchase Requests */}
+      <EbookPurchaseNotifications />
+
       {/* Pending Categories from Managers */}
       {pendingCats.length > 0 && (
         <div className="space-y-3">
@@ -3491,6 +3496,550 @@ function AffiliateMarketingSection() {
   );
 }
 
+// ---- eBook Types ----
+interface EBook {
+  id: string;
+  title: string;
+  coverUrl: string;
+  price: string;
+  downloadLink: string;
+  description: string;
+  createdAt: string;
+}
+
+interface EBookPurchase {
+  id: string;
+  bookId: string;
+  bookTitle: string;
+  buyerName: string;
+  buyerMobile: string;
+  screenshotBase64: string;
+  status: "pending" | "approved" | "rejected";
+  submittedAt: string;
+}
+
+function readEbooks(): EBook[] {
+  try {
+    return JSON.parse(localStorage.getItem("dz_ebooks") ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveEbooks(books: EBook[]) {
+  localStorage.setItem("dz_ebooks", JSON.stringify(books));
+}
+
+function readEbookPurchases(): EBookPurchase[] {
+  try {
+    return JSON.parse(localStorage.getItem("dz_ebook_purchases") ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveEbookPurchases(purchases: EBookPurchase[]) {
+  localStorage.setItem("dz_ebook_purchases", JSON.stringify(purchases));
+}
+
+// ---- eBook Purchase Notifications (inside ProviderApprovals) ----
+function EbookPurchaseNotifications() {
+  const [purchases, setPurchases] = useState<EBookPurchase[]>(() =>
+    readEbookPurchases().filter((p) => p.status === "pending"),
+  );
+
+  const handleApprove = (id: string) => {
+    const all = readEbookPurchases();
+    const updated = all.map((p) =>
+      p.id === id ? { ...p, status: "approved" as const } : p,
+    );
+    saveEbookPurchases(updated);
+    setPurchases(updated.filter((p) => p.status === "pending"));
+    toast.success("Book approved! Download unlock ho gaya 📚");
+  };
+
+  const handleReject = (id: string) => {
+    const all = readEbookPurchases();
+    const updated = all.filter((p) => p.id !== id);
+    saveEbookPurchases(updated);
+    setPurchases(updated.filter((p) => p.status === "pending"));
+    toast.success("eBook request reject ho gaya.");
+  };
+
+  if (purchases.length === 0) return null;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <h3 className="font-heading font-semibold text-foreground">
+          📚 eBook Purchase Requests
+        </h3>
+        <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-0.5 rounded-full">
+          {purchases.length} Pending
+        </span>
+      </div>
+      {purchases.map((purchase, i) => (
+        <div
+          key={purchase.id}
+          data-ocid={`ebook.item.${i + 1}`}
+          className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 space-y-3"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="bg-emerald-600 text-white text-xs font-bold px-2.5 py-1 rounded-full">
+                  📚 {purchase.bookTitle}
+                </span>
+                <span className="bg-yellow-100 text-yellow-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                  Payment Pending
+                </span>
+              </div>
+              <p className="font-semibold text-foreground">
+                {purchase.buyerName}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                📱 {purchase.buyerMobile}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {new Date(purchase.submittedAt).toLocaleDateString("hi-IN", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </p>
+            </div>
+            {purchase.screenshotBase64 && (
+              <img
+                src={purchase.screenshotBase64}
+                alt="Payment screenshot"
+                className="w-16 h-16 object-cover rounded-xl border border-border flex-shrink-0"
+              />
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              data-ocid={`ebook.confirm_button.${i + 1}`}
+              onClick={() => handleApprove(purchase.id)}
+              className="flex items-center gap-1.5 bg-green-500 hover:bg-green-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
+            >
+              <CheckCircle size={15} /> Approve
+            </button>
+            <button
+              type="button"
+              data-ocid={`ebook.delete_button.${i + 1}`}
+              onClick={() => handleReject(purchase.id)}
+              className="flex items-center gap-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-semibold px-4 py-2 rounded-xl transition-colors border border-red-200"
+            >
+              <XCircle size={15} /> Reject
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---- eBook Manager Section ----
+function EbookManagerSection() {
+  const [books, setBooks] = useState<EBook[]>(readEbooks);
+  const [storeEnabled, setStoreEnabled] = useState<boolean>(() => {
+    return localStorage.getItem("dz_ebook_store_enabled") === "true";
+  });
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const emptyForm = {
+    title: "",
+    coverUrl: "",
+    price: "",
+    downloadLink: "",
+    description: "",
+  };
+  const [formData, setFormData] = useState(emptyForm);
+  const [editFormData, setEditFormData] = useState(emptyForm);
+
+  const handleToggleStore = () => {
+    const next = !storeEnabled;
+    setStoreEnabled(next);
+    localStorage.setItem("dz_ebook_store_enabled", next ? "true" : "false");
+    toast.success(
+      next ? "eBook Store ON ho gaya! 📚" : "eBook Store OFF ho gaya.",
+    );
+  };
+
+  const handleAddBook = () => {
+    if (!formData.title.trim()) {
+      toast.error("Book Title zaroor bharein");
+      return;
+    }
+    const newBook: EBook = {
+      id: Date.now().toString(),
+      title: formData.title.trim(),
+      coverUrl: formData.coverUrl.trim(),
+      price: formData.price.trim(),
+      downloadLink: formData.downloadLink.trim(),
+      description: formData.description.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [...books, newBook];
+    setBooks(updated);
+    saveEbooks(updated);
+    setFormData(emptyForm);
+    setShowAddForm(false);
+    toast.success(`"${newBook.title}" add ho gayi! 📚`);
+  };
+
+  const handleDeleteBook = (id: string) => {
+    const book = books.find((b) => b.id === id);
+    const updated = books.filter((b) => b.id !== id);
+    setBooks(updated);
+    saveEbooks(updated);
+    toast.success(`${book?.title ?? "Book"} delete ho gayi.`);
+  };
+
+  const handleStartEdit = (book: EBook) => {
+    setEditingId(book.id);
+    setEditFormData({
+      title: book.title,
+      coverUrl: book.coverUrl,
+      price: book.price,
+      downloadLink: book.downloadLink,
+      description: book.description,
+    });
+  };
+
+  const handleSaveEdit = (id: string) => {
+    if (!editFormData.title.trim()) {
+      toast.error("Book Title zaroor bharein");
+      return;
+    }
+    const updated = books.map((b) =>
+      b.id === id
+        ? {
+            ...b,
+            title: editFormData.title.trim(),
+            coverUrl: editFormData.coverUrl.trim(),
+            price: editFormData.price.trim(),
+            downloadLink: editFormData.downloadLink.trim(),
+            description: editFormData.description.trim(),
+          }
+        : b,
+    );
+    setBooks(updated);
+    saveEbooks(updated);
+    setEditingId(null);
+    toast.success("Book update ho gayi! ✅");
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Store ON/OFF Toggle Card */}
+      <div className="bg-white rounded-2xl border border-border shadow-card p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="font-heading font-bold text-foreground text-lg">
+              📚 eBook Store
+            </h3>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {storeEnabled
+                ? "Store ON hai — Homepage par dikh raha hai"
+                : "Store OFF hai — Homepage par nahi dikhega"}
+            </p>
+          </div>
+          <button
+            type="button"
+            data-ocid="ebook.toggle"
+            onClick={handleToggleStore}
+            className={`relative w-14 h-7 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-ring ${storeEnabled ? "bg-emerald-500" : "bg-gray-300"}`}
+            aria-label="Store toggle"
+          >
+            <span
+              className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform ${storeEnabled ? "translate-x-7" : "translate-x-0.5"}`}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Add New eBook Button + Form */}
+      <div className="bg-white rounded-2xl border border-border shadow-card p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-heading font-semibold text-foreground">
+            eBook Collection ({books.length})
+          </h3>
+          <button
+            type="button"
+            data-ocid="ebook.primary_button"
+            onClick={() => {
+              setShowAddForm((v) => !v);
+              setFormData(emptyForm);
+            }}
+            className="flex items-center gap-1.5 bg-primary text-primary-foreground text-sm font-semibold px-4 py-2 rounded-xl hover:opacity-90 transition-opacity"
+          >
+            <Plus size={16} />
+            Add New eBook
+          </button>
+        </div>
+
+        {/* Inline Add Form */}
+        {showAddForm && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 space-y-3"
+          >
+            <h4 className="font-semibold text-emerald-800 text-sm">
+              Nayi eBook Add Karein
+            </h4>
+            <div className="space-y-2">
+              <input
+                data-ocid="ebook.input"
+                type="text"
+                placeholder="Book Title *"
+                value={formData.title}
+                onChange={(e) =>
+                  setFormData((p) => ({ ...p, title: e.target.value }))
+                }
+                className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring bg-white"
+              />
+              <input
+                data-ocid="ebook.input"
+                type="url"
+                placeholder="Book Cover Image URL"
+                value={formData.coverUrl}
+                onChange={(e) =>
+                  setFormData((p) => ({ ...p, coverUrl: e.target.value }))
+                }
+                className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring bg-white"
+              />
+              <input
+                data-ocid="ebook.input"
+                type="number"
+                placeholder="Price (₹)"
+                value={formData.price}
+                onChange={(e) =>
+                  setFormData((p) => ({ ...p, price: e.target.value }))
+                }
+                className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring bg-white"
+              />
+              <input
+                data-ocid="ebook.input"
+                type="url"
+                placeholder="Download Link (PDF URL)"
+                value={formData.downloadLink}
+                onChange={(e) =>
+                  setFormData((p) => ({ ...p, downloadLink: e.target.value }))
+                }
+                className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring bg-white"
+              />
+              <textarea
+                data-ocid="ebook.textarea"
+                placeholder="Description (kitaab ke baare mein)"
+                value={formData.description}
+                onChange={(e) =>
+                  setFormData((p) => ({ ...p, description: e.target.value }))
+                }
+                rows={3}
+                className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring bg-white resize-none"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                data-ocid="ebook.save_button"
+                onClick={handleAddBook}
+                className="flex items-center gap-1.5 bg-primary text-primary-foreground text-sm font-semibold px-5 py-2 rounded-xl hover:opacity-90 transition-opacity"
+              >
+                <CheckCircle size={15} /> Save
+              </button>
+              <button
+                type="button"
+                data-ocid="ebook.cancel_button"
+                onClick={() => setShowAddForm(false)}
+                className="text-sm font-medium px-5 py-2 rounded-xl border border-border hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* eBook List */}
+        {books.length === 0 ? (
+          <div
+            data-ocid="ebook.empty_state"
+            className="text-center py-10 text-muted-foreground"
+          >
+            <p className="text-4xl mb-2">📚</p>
+            <p className="font-medium">Abhi koi eBook nahi hai</p>
+            <p className="text-sm">Upar se "Add New eBook" dabao</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {books.map((book, i) => (
+              <div
+                key={book.id}
+                data-ocid={`ebook.item.${i + 1}`}
+                className="bg-white border border-border rounded-2xl p-4"
+              >
+                {editingId === book.id ? (
+                  /* Edit Mode */
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm text-foreground mb-2">
+                      Edit: {book.title}
+                    </h4>
+                    <input
+                      data-ocid="ebook.input"
+                      type="text"
+                      placeholder="Book Title *"
+                      value={editFormData.title}
+                      onChange={(e) =>
+                        setEditFormData((p) => ({
+                          ...p,
+                          title: e.target.value,
+                        }))
+                      }
+                      className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <input
+                      data-ocid="ebook.input"
+                      type="url"
+                      placeholder="Cover Image URL"
+                      value={editFormData.coverUrl}
+                      onChange={(e) =>
+                        setEditFormData((p) => ({
+                          ...p,
+                          coverUrl: e.target.value,
+                        }))
+                      }
+                      className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <input
+                      data-ocid="ebook.input"
+                      type="number"
+                      placeholder="Price (₹)"
+                      value={editFormData.price}
+                      onChange={(e) =>
+                        setEditFormData((p) => ({
+                          ...p,
+                          price: e.target.value,
+                        }))
+                      }
+                      className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <input
+                      data-ocid="ebook.input"
+                      type="url"
+                      placeholder="Download Link (PDF URL)"
+                      value={editFormData.downloadLink}
+                      onChange={(e) =>
+                        setEditFormData((p) => ({
+                          ...p,
+                          downloadLink: e.target.value,
+                        }))
+                      }
+                      className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <textarea
+                      data-ocid="ebook.textarea"
+                      placeholder="Description"
+                      value={editFormData.description}
+                      onChange={(e) =>
+                        setEditFormData((p) => ({
+                          ...p,
+                          description: e.target.value,
+                        }))
+                      }
+                      rows={2}
+                      className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring resize-none"
+                    />
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        data-ocid={`ebook.save_button.${i + 1}`}
+                        onClick={() => handleSaveEdit(book.id)}
+                        className="flex items-center gap-1.5 bg-primary text-primary-foreground text-sm font-semibold px-4 py-2 rounded-xl hover:opacity-90"
+                      >
+                        <CheckCircle size={14} /> Save
+                      </button>
+                      <button
+                        type="button"
+                        data-ocid={`ebook.cancel_button.${i + 1}`}
+                        onClick={() => setEditingId(null)}
+                        className="text-sm font-medium px-4 py-2 rounded-xl border border-border hover:bg-muted"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Display Mode */
+                  <div className="flex gap-3">
+                    {book.coverUrl ? (
+                      <img
+                        src={book.coverUrl}
+                        alt={book.title}
+                        className="w-14 h-18 object-cover rounded-xl flex-shrink-0 border border-border"
+                        style={{ height: "72px" }}
+                      />
+                    ) : (
+                      <div
+                        className="w-14 h-18 bg-emerald-100 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style={{ height: "72px" }}
+                      >
+                        <span className="text-2xl">📚</span>
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-foreground text-sm truncate">
+                            {book.title}
+                          </p>
+                          {book.price && (
+                            <span className="inline-block bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-0.5 rounded-full mt-0.5">
+                              ₹{book.price}
+                            </span>
+                          )}
+                          {book.description && (
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                              {book.description}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-1.5 flex-shrink-0">
+                          <button
+                            type="button"
+                            data-ocid={`ebook.edit_button.${i + 1}`}
+                            onClick={() => handleStartEdit(book)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                            aria-label="Edit"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            data-ocid={`ebook.delete_button.${i + 1}`}
+                            onClick={() => handleDeleteBook(book.id)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
+                            aria-label="Delete"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ---- Main Admin Dashboard ----
 export default function AdminDashboardPage() {
   const { user } = useAuth();
@@ -3577,6 +4126,11 @@ export default function AdminDashboardPage() {
       label: "Affiliate Marketing",
       icon: <TrendingUp size={18} />,
     },
+    {
+      key: "ebookManager" as AdminSection,
+      label: "📚 eBook Store",
+      icon: <BookOpen size={18} />,
+    },
   ];
 
   const NAV_ITEMS = isManager
@@ -3629,6 +4183,8 @@ export default function AdminDashboardPage() {
         return <SocialMediaSection />;
       case "affiliateMarketing" as AdminSection:
         return <AffiliateMarketingSection />;
+      case "ebookManager" as AdminSection:
+        return <EbookManagerSection />;
       default:
         return <UserManagement />;
     }

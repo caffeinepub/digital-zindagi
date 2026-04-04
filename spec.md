@@ -1,50 +1,62 @@
-# Digital Zindagi V118
+# Digital Zindagi — V124: Multi-eBook Management System
 
 ## Current State
-- Provider Registration form (SignupPage.tsx) exists but may have loading/error states blocking submission
-- Data is stored in localStorage only — no Firebase/backend DB connection for provider registrations
-- Homepage has a visible 'Install App' button (PWA install prompt)
-- No social media ON/OFF controls in Admin Panel
-- No Affiliate Marketing section in Admin Panel
-- Provider form ends with 'Subscription Lege' and 'Ads Dekhe' buttons (V116)
-- Admin Panel has sections: founder, categoryManager, users, search, approvals, controls, banners, settings, pricing, staff, ads, chat
-- AdminSection type and ALL_NAV_ITEMS array define panel navigation
+- Full multi-vendor marketplace PWA with Emerald Green theme
+- Admin Panel has: Category Manager, User Management, Provider Approvals, Ads Manager, Social Media, Affiliate Marketing, Founder Settings, Security Settings
+- HomePage shows: Hero Carousel, Rate Calculator, Category Grid, Featured Providers, Register CTA, Affiliate Banner, Social Media icons
+- All data is stored in localStorage (prefixed `dz_`)
+- Provider payment screenshot approvals exist in ProviderApprovals section
 
 ## Requested Changes (Diff)
 
 ### Add
-1. **Social Media ON/OFF controls in Admin Panel** — new section or sub-section in Settings/Controls. Admin can toggle social media links (Facebook, Instagram, WhatsApp, YouTube) on/off. When ON, icons appear on homepage. Settings saved to localStorage (`dz_social_settings`).
-2. **Affiliate Marketing section in Admin Panel** — new AdminSection `affiliateMarketing`. Admin can toggle ON/OFF. When ON, a visible 'Affiliate Marketing' banner/section appears on homepage with a join/refer link. Settings saved to localStorage (`dz_affiliate_settings`).
-3. **Provider registration success message** — After successful form submit, show toast AND inline card: 'Registration Successful! Admin will approve you soon.'
-4. **Pending Requests in Admin Panel** — New registrations must appear in Admin Panel > Provider Approvals section as pending entries immediately after submission.
+1. **Admin Panel — eBook Manager section** (`ebookManager`):
+   - 'Add New eBook' button opens an inline form with: Book Title, Cover Image URL, Price, Download Link (PDF URL), Description
+   - Save button stores the eBook in `dz_ebooks` localStorage array with unique id, title, coverUrl, price, downloadLink, description, createdAt
+   - Each eBook card in admin shows: cover thumbnail, title, price, Edit (pencil) and Delete (trash) buttons
+   - Edit mode: inline editable fields for all 5 fields, Save/Cancel
+   - **eBook Store ON/OFF toggle** at the top of eBook Manager — when OFF, the entire eBook section is hidden from homepage; when ON it shows
+   - Store toggle saved to `dz_ebook_store_enabled` (boolean) in localStorage
+
+2. **Admin Panel — Provider Payment Notification Enhancement**:
+   - When a provider submits a payment screenshot, the book name should appear in the Pending Approvals notification
+   - In `ProviderApprovals` section, local providers from `dz_providers` should show `bookName` field if present
+
+3. **HomePage — eBook Store Section** (dynamic, below Category Grid, above Featured Providers):
+   - Only visible when `dz_ebook_store_enabled` is `true`
+   - Reads eBooks from `dz_ebooks` localStorage
+   - Shows a scrollable horizontal grid of eBook cards (BookCover image, Title, Price, 'Buy Now' button)
+   - Clicking 'Buy Now' opens a purchase modal:
+     - Shows book title, cover, price
+     - Input for buyer name and mobile
+     - UPI QR/screenshot upload (file picker)
+     - 'Send Payment Screenshot' button → saves to `dz_ebook_purchases` with bookId, bookTitle, buyerName, buyerMobile, screenshotBase64, status: 'pending', submittedAt
+   - A book is locked (padlock icon, no download) until its purchase entry has `status: 'approved'` for that buyer's mobile number
+   - If approved, 'Download PDF' button appears (links to `downloadLink`)
+
+4. **Admin Panel — eBook Purchases Notifications**:
+   - In ProviderApprovals (or new sub-section inside eBook Manager), show pending eBook purchase requests
+   - Each notification shows: Buyer Name, Mobile, **Book Name**, screenshot preview, Approve / Reject buttons
+   - Approving sets `status: 'approved'` in `dz_ebook_purchases` for that entry
+   - Rejecting removes the entry
 
 ### Modify
-1. **Remove Install App button from homepage** — Remove the PWA install button from the hero section of HomePage.tsx entirely.
-2. **Provider Registration Form** — Fix any loading/error states. Ensure form submits cleanly. Data (Name, Mobile, Category, plan choice) must be saved to localStorage as `dz_providers` array immediately on submit. Form must always show 'Subscription Lege' and 'Ads Dekhe' choice buttons at the end.
-3. **AdminSection type** — Add `affiliateMarketing` to the union type.
-4. **ALL_NAV_ITEMS** — Add 'Affiliate Marketing' nav item with appropriate icon.
-5. **renderSection switch** — Handle `affiliateMarketing` case.
+- `AdminDashboardPage.tsx`: Add `ebookManager` to `AdminSection` type; add sidebar nav item "📚 eBook Store"; add `EbookManagerSection` component; modify `ProviderApprovals` to also show eBook purchase pending requests with book name visible
+- `HomePage.tsx`: Add eBook store section between CategoryGrid and Featured Providers; read toggle state + books from localStorage
 
 ### Remove
-- Install App button and its PWA install logic from HomePage.tsx hero section
+- Nothing removed
 
 ## Implementation Plan
-
-1. **HomePage.tsx** — Remove install button block (lines ~99-130) and the `installPrompt` state + `beforeinstallprompt` event listener. Keep rest of hero section intact.
-
-2. **SignupPage.tsx** — Fix provider registration:
-   - Remove any hardcoded loading/error states
-   - On form submit: save provider data to localStorage `dz_providers` array with fields: id, name, mobile, category, planType (`pending_premium` or `free`), status (`pending`), createdAt (ISO date)
-   - Show success toast + navigate to success/choose-plan page
-   - Ensure 'Subscription Lege' and 'Ads Dekhe' buttons are present and functional
-
-3. **AdminDashboardPage.tsx**:
-   - Add `affiliateMarketing` to AdminSection type
-   - Add `AffiliateMrketingSection` component: ON/OFF toggle (saved to `dz_affiliate_settings` in localStorage), plus a text field for the affiliate link/description
-   - Add `SocialMediaSection` within Settings or as part of Homepage Controls: per-platform ON/OFF toggles for Facebook, Instagram, WhatsApp, YouTube (saved to `dz_social_settings`)
-   - Add nav item for Affiliate Marketing
-   - Update ProviderApprovals section to read from localStorage `dz_providers` as well as backend, merging both lists
-
-4. **HomePage.tsx**:
-   - Add social media icons section that reads `dz_social_settings` from localStorage — shows enabled social icons with placeholder links
-   - Add affiliate marketing banner that reads `dz_affiliate_settings` from localStorage — shows when enabled
+1. Add `EbookManagerSection` component inside `AdminDashboardPage.tsx`:
+   - State: `dz_ebooks` (array of books), `dz_ebook_store_enabled` (bool)
+   - Toggle card at top (ON/OFF store)
+   - 'Add New eBook' button → show inline add form
+   - Book list with Edit/Delete per row
+2. Enhance `ProviderApprovals` component to also render `dz_ebook_purchases` (pending) with book name + Approve/Reject
+3. Add eBook Store section in `HomePage.tsx`:
+   - Read `dz_ebook_store_enabled` and `dz_ebooks`
+   - Horizontal scroll grid of book cards
+   - Buy Now modal with name, mobile, screenshot upload, submit
+   - Per-book lock logic based on buyer mobile matching an approved entry in `dz_ebook_purchases`
+4. Validate and build

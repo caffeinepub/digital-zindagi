@@ -1,4 +1,12 @@
-import { Calculator, Facebook, Instagram, Youtube } from "lucide-react";
+import {
+  Calculator,
+  Download,
+  Facebook,
+  Instagram,
+  ShoppingCart,
+  X,
+  Youtube,
+} from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -99,6 +107,270 @@ function readAffiliateSettings(): AffiliateSettings {
   }
 }
 
+interface EBook {
+  id: string;
+  title: string;
+  coverUrl: string;
+  price: string;
+  downloadLink: string;
+  description: string;
+  createdAt: string;
+}
+
+interface EBookPurchase {
+  id: string;
+  bookId: string;
+  bookTitle: string;
+  buyerName: string;
+  buyerMobile: string;
+  screenshotBase64: string;
+  status: "pending" | "approved" | "rejected";
+  submittedAt: string;
+}
+
+function readEbooksHome(): EBook[] {
+  try {
+    return JSON.parse(localStorage.getItem("dz_ebooks") ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function readEbookPurchasesHome(): EBookPurchase[] {
+  try {
+    return JSON.parse(localStorage.getItem("dz_ebook_purchases") ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function isEbookStoreEnabled(): boolean {
+  return localStorage.getItem("dz_ebook_store_enabled") === "true";
+}
+
+// ---- eBook Buy Modal ----
+function EbookBuyModal({
+  book,
+  onClose,
+}: {
+  book: EBook;
+  onClose: () => void;
+}) {
+  const [buyerName, setBuyerName] = useState("");
+  const [buyerMobile, setBuyerMobile] = useState(
+    () => localStorage.getItem("dz_buyer_mobile") ?? "",
+  );
+  const [screenshotBase64, setScreenshotBase64] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setScreenshotBase64(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmit = () => {
+    if (!buyerName.trim()) {
+      toast.error("Apna naam likhein");
+      return;
+    }
+    if (!/^[0-9]{10}$/.test(buyerMobile.trim())) {
+      toast.error("10-digit mobile number likhein");
+      return;
+    }
+    if (!screenshotBase64) {
+      toast.error("Payment screenshot upload karein");
+      return;
+    }
+    setSubmitting(true);
+    const purchases: EBookPurchase[] = (() => {
+      try {
+        return JSON.parse(localStorage.getItem("dz_ebook_purchases") ?? "[]");
+      } catch {
+        return [];
+      }
+    })();
+    const newPurchase: EBookPurchase = {
+      id: Date.now().toString(),
+      bookId: book.id,
+      bookTitle: book.title,
+      buyerName: buyerName.trim(),
+      buyerMobile: buyerMobile.trim(),
+      screenshotBase64,
+      status: "pending",
+      submittedAt: new Date().toISOString(),
+    };
+    purchases.push(newPurchase);
+    localStorage.setItem("dz_ebook_purchases", JSON.stringify(purchases));
+    localStorage.setItem("dz_buyer_mobile", buyerMobile.trim());
+    toast.success(
+      "Payment screenshot bhej diya! Admin approve hone par download unlock hoga. 📚",
+    );
+    setSubmitting(false);
+    onClose();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4"
+      data-ocid="ebook.modal"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onClose();
+      }}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 40 }}
+        transition={{ duration: 0.25 }}
+        className="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md overflow-hidden"
+      >
+        {/* Header */}
+        <div className="bg-emerald-header text-white px-5 py-4 flex items-start justify-between gap-3">
+          <div className="flex gap-3 items-start">
+            {book.coverUrl ? (
+              <img
+                src={book.coverUrl}
+                alt={book.title}
+                className="w-12 h-12 object-cover rounded-xl flex-shrink-0"
+              />
+            ) : (
+              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                <span className="text-2xl">📚</span>
+              </div>
+            )}
+            <div>
+              <p className="font-heading font-bold text-base leading-tight">
+                {book.title}
+              </p>
+              {book.price && (
+                <p className="text-white/80 text-sm mt-0.5">₹{book.price}</p>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            data-ocid="ebook.close_button"
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 flex-shrink-0"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Form */}
+        <div className="p-5 space-y-4">
+          <h3 className="font-semibold text-foreground text-base">
+            Payment Details Bharein
+          </h3>
+          <div className="space-y-3">
+            <div>
+              <label
+                htmlFor="buyer-name"
+                className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1"
+              >
+                Aapka Naam *
+              </label>
+              <input
+                id="buyer-name"
+                data-ocid="ebook.input"
+                type="text"
+                placeholder="Naam likhein"
+                value={buyerName}
+                onChange={(e) => setBuyerName(e.target.value)}
+                className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="buyer-mobile"
+                className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1"
+              >
+                Mobile Number *
+              </label>
+              <input
+                id="buyer-mobile"
+                data-ocid="ebook.input"
+                type="tel"
+                placeholder="10-digit mobile number"
+                value={buyerMobile}
+                onChange={(e) => setBuyerMobile(e.target.value)}
+                maxLength={10}
+                className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="payment-screenshot"
+                className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1"
+              >
+                Payment Screenshot *
+              </label>
+              <label
+                htmlFor="payment-screenshot"
+                data-ocid="ebook.upload_button"
+                className="flex items-center gap-2 cursor-pointer border-2 border-dashed border-emerald-300 rounded-xl px-4 py-3 hover:border-emerald-500 hover:bg-emerald-50 transition-colors"
+              >
+                {screenshotBase64 ? (
+                  <img
+                    src={screenshotBase64}
+                    alt="Screenshot preview"
+                    className="w-12 h-12 object-cover rounded-lg"
+                  />
+                ) : (
+                  <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <span className="text-xl">📸</span>
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm font-semibold text-emerald-700">
+                    {screenshotBase64
+                      ? "Screenshot ready ✅"
+                      : "Gallery se screenshot choose karein"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    UPI/Bank payment ka screenshot
+                  </p>
+                </div>
+                <input
+                  id="payment-screenshot"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+              </label>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            data-ocid="ebook.submit_button"
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="w-full bg-primary text-primary-foreground font-bold py-3.5 rounded-xl hover:opacity-90 transition-opacity disabled:opacity-60 text-sm"
+          >
+            {submitting
+              ? "Sending..."
+              : "📤 Send Screenshot & Request Download"}
+          </button>
+          <p className="text-xs text-center text-muted-foreground">
+            Screenshot bhejne ke baad Admin verify karenge — approve hone par
+            download link unlock ho jaayega.
+          </p>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // WhatsApp icon as SVG since lucide doesn't have it
 function WhatsAppIcon({ size = 22 }: { size?: number }) {
   return (
@@ -132,12 +404,18 @@ export default function HomePage() {
   const [affiliateSettings, setAffiliateSettings] = useState<AffiliateSettings>(
     readAffiliateSettings,
   );
+  const [ebookStoreEnabled, setEbookStoreEnabled] =
+    useState(isEbookStoreEnabled);
+  const [ebooks, setEbooks] = useState<EBook[]>(readEbooksHome);
+  const [buyModalBook, setBuyModalBook] = useState<EBook | null>(null);
 
   // Re-read settings on focus (in case admin changed them)
   useEffect(() => {
     const onFocus = () => {
       setSocialSettings(readSocialSettings());
       setAffiliateSettings(readAffiliateSettings());
+      setEbookStoreEnabled(isEbookStoreEnabled());
+      setEbooks(readEbooksHome());
     };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
@@ -318,6 +596,105 @@ export default function HomePage() {
             </button>
           </motion.div>
         </section>
+
+        {/* eBook Store Section */}
+        {ebookStoreEnabled && ebooks.length > 0 && (
+          <section className="max-w-7xl mx-auto px-4 pt-2 pb-6">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <h2 className="font-heading font-bold text-2xl text-foreground">
+                  📚 Digital eBook Store
+                </h2>
+                <span className="bg-emerald-500 text-white text-xs font-bold px-2.5 py-1 rounded-full animate-pulse">
+                  New
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {ebooks.map((book) => {
+                  const purchases = readEbookPurchasesHome();
+                  const buyerMobile =
+                    localStorage.getItem("dz_buyer_mobile") ?? "";
+                  const myPurchase = purchases.find(
+                    (p) =>
+                      p.bookId === book.id &&
+                      (!buyerMobile || p.buyerMobile === buyerMobile),
+                  );
+                  return (
+                    <div
+                      key={book.id}
+                      data-ocid="ebook.card"
+                      className="bg-white rounded-2xl border border-border shadow-card overflow-hidden flex flex-col"
+                    >
+                      {book.coverUrl ? (
+                        <img
+                          src={book.coverUrl}
+                          alt={book.title}
+                          className="w-full h-36 object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="w-full h-36 bg-gradient-to-br from-emerald-100 to-emerald-200 flex items-center justify-center">
+                          <span className="text-5xl">📚</span>
+                        </div>
+                      )}
+                      <div className="p-3 flex flex-col flex-1 gap-2">
+                        <p className="font-semibold text-foreground text-sm line-clamp-2 leading-snug">
+                          {book.title}
+                        </p>
+                        {book.price && (
+                          <span className="self-start bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                            ₹{book.price}
+                          </span>
+                        )}
+                        <div className="mt-auto pt-1">
+                          {myPurchase?.status === "approved" ? (
+                            <a
+                              href={book.downloadLink || "#"}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              data-ocid="ebook.primary_button"
+                              className="flex items-center justify-center gap-1.5 w-full bg-green-500 hover:bg-green-600 text-white text-xs font-semibold py-2 rounded-xl transition-colors"
+                            >
+                              <Download size={13} /> Download PDF
+                            </a>
+                          ) : myPurchase?.status === "pending" ? (
+                            <div
+                              data-ocid="ebook.loading_state"
+                              className="flex items-center justify-center w-full bg-yellow-100 text-yellow-700 text-xs font-semibold py-2 rounded-xl"
+                            >
+                              ⏳ Approval Pending
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              data-ocid="ebook.primary_button"
+                              onClick={() => setBuyModalBook(book)}
+                              className="flex items-center justify-center gap-1.5 w-full bg-primary text-primary-foreground text-xs font-semibold py-2 rounded-xl hover:opacity-90 transition-opacity"
+                            >
+                              <ShoppingCart size={13} /> Buy Now
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </section>
+        )}
+
+        {/* Buy Now Modal */}
+        {buyModalBook && (
+          <EbookBuyModal
+            book={buyModalBook}
+            onClose={() => setBuyModalBook(null)}
+          />
+        )}
 
         <section className="max-w-7xl mx-auto px-4 py-8">
           <motion.div
