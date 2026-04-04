@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Loader2, Users } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -76,21 +76,36 @@ export default function ManagerLoginPage() {
       >
         <div className="bg-emerald-header px-8 py-8">
           <Link
-            to="/login"
+            to="/"
             data-ocid="manager_login.link"
             className="text-white/70 text-sm hover:text-white mb-4 block"
           >
-            &larr; Main Login
+            &larr; वापस जाओ
           </Link>
-          <div className="flex items-center gap-3">
-            <div className="bg-white/20 rounded-2xl p-2.5">
-              <Users size={28} className="text-white" />
-            </div>
+          <div className="flex flex-col items-center text-center gap-3">
+            <img
+              src="/logo.png"
+              alt="Digital Zindagi Logo"
+              className="w-14 h-14 rounded-xl object-contain"
+              onError={(e) => {
+                const img = e.currentTarget as HTMLImageElement;
+                img.src =
+                  "/assets/generated/dz-logo-transparent.dim_512x512.png";
+                img.onerror = () => {
+                  img.src = "/assets/generated/dz-logo-192.dim_192x192.png";
+                  img.onerror = () => {
+                    img.style.display = "none";
+                  };
+                };
+              }}
+            />
             <div>
               <h1 className="font-heading font-bold text-white text-2xl">
-                Manager Login
+                Staff Login
               </h1>
-              <p className="text-white/70 text-sm">Staff access portal</p>
+              <p className="text-white/70 text-sm">
+                Digital Zindagi — Manager Portal
+              </p>
             </div>
           </div>
         </div>

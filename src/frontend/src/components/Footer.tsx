@@ -138,6 +138,15 @@ export default function Footer() {
           <p className="text-white/50 text-sm">
             &copy; {new Date().getFullYear()} Digital Zindagi
           </p>
+          <div className="mt-3">
+            <Link
+              to="/manager-login"
+              data-ocid="footer.staff_login"
+              className="text-white/30 hover:text-white/60 text-xs underline underline-offset-2 transition-colors"
+            >
+              Staff Login
+            </Link>
+          </div>
         </div>
 
         {/* Founder Row */}

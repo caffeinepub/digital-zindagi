@@ -198,12 +198,19 @@ export default function LoginPage() {
           {/* Digital Zindagi Logo */}
           <div className="flex justify-center mb-4">
             <img
-              src="/assets/generated/dz-logo-transparent.dim_512x512.png"
+              src="/logo.png"
               alt="Digital Zindagi Logo"
-              className="w-16 h-16 rounded-full object-cover"
+              className="w-16 h-16 rounded-full object-contain"
               onError={(e) => {
                 const img = e.currentTarget as HTMLImageElement;
-                img.src = "/assets/generated/dz-logo-192.dim_192x192.png";
+                img.src =
+                  "/assets/generated/dz-logo-transparent.dim_512x512.png";
+                img.onerror = () => {
+                  img.src = "/assets/generated/dz-logo-192.dim_192x192.png";
+                  img.onerror = () => {
+                    img.style.display = "none";
+                  };
+                };
               }}
             />
           </div>
