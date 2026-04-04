@@ -1,62 +1,42 @@
-# Digital Zindagi — V124: Multi-eBook Management System
+# Digital Zindagi
 
 ## Current State
-- Full multi-vendor marketplace PWA with Emerald Green theme
-- Admin Panel has: Category Manager, User Management, Provider Approvals, Ads Manager, Social Media, Affiliate Marketing, Founder Settings, Security Settings
-- HomePage shows: Hero Carousel, Rate Calculator, Category Grid, Featured Providers, Register CTA, Affiliate Banner, Social Media icons
-- All data is stored in localStorage (prefixed `dz_`)
-- Provider payment screenshot approvals exist in ProviderApprovals section
+- App has active providers loaded via `useActiveProviders()` (from backend) and also stored in `dz_providers` localStorage
+- HomePage shows up to 6 featured providers without any location filtering
+- CategoryPage shows all providers for a given category, no location filter
+- ProviderCard shows WhatsApp and Contact buttons; no navigation/directions button
+- SignupPage saves provider registration data to `dz_providers` localStorage; no GPS fields
+- `ProviderProfile` backend type has `address: string` but no `lat`/`lng` fields
+- There is an existing Search bar on the homepage that navigates to `/search`
+- No GPS or geolocation logic exists anywhere
 
 ## Requested Changes (Diff)
 
 ### Add
-1. **Admin Panel — eBook Manager section** (`ebookManager`):
-   - 'Add New eBook' button opens an inline form with: Book Title, Cover Image URL, Price, Download Link (PDF URL), Description
-   - Save button stores the eBook in `dz_ebooks` localStorage array with unique id, title, coverUrl, price, downloadLink, description, createdAt
-   - Each eBook card in admin shows: cover thumbnail, title, price, Edit (pencil) and Delete (trash) buttons
-   - Edit mode: inline editable fields for all 5 fields, Save/Cancel
-   - **eBook Store ON/OFF toggle** at the top of eBook Manager — when OFF, the entire eBook section is hidden from homepage; when ON it shows
-   - Store toggle saved to `dz_ebook_store_enabled` (boolean) in localStorage
-
-2. **Admin Panel — Provider Payment Notification Enhancement**:
-   - When a provider submits a payment screenshot, the book name should appear in the Pending Approvals notification
-   - In `ProviderApprovals` section, local providers from `dz_providers` should show `bookName` field if present
-
-3. **HomePage — eBook Store Section** (dynamic, below Category Grid, above Featured Providers):
-   - Only visible when `dz_ebook_store_enabled` is `true`
-   - Reads eBooks from `dz_ebooks` localStorage
-   - Shows a scrollable horizontal grid of eBook cards (BookCover image, Title, Price, 'Buy Now' button)
-   - Clicking 'Buy Now' opens a purchase modal:
-     - Shows book title, cover, price
-     - Input for buyer name and mobile
-     - UPI QR/screenshot upload (file picker)
-     - 'Send Payment Screenshot' button → saves to `dz_ebook_purchases` with bookId, bookTitle, buyerName, buyerMobile, screenshotBase64, status: 'pending', submittedAt
-   - A book is locked (padlock icon, no download) until its purchase entry has `status: 'approved'` for that buyer's mobile number
-   - If approved, 'Download PDF' button appears (links to `downloadLink`)
-
-4. **Admin Panel — eBook Purchases Notifications**:
-   - In ProviderApprovals (or new sub-section inside eBook Manager), show pending eBook purchase requests
-   - Each notification shows: Buyer Name, Mobile, **Book Name**, screenshot preview, Approve / Reject buttons
-   - Approving sets `status: 'approved'` in `dz_ebook_purchases` for that entry
-   - Rejecting removes the entry
+- `useUserLocation` hook: requests browser GPS permission on mount, returns `{ lat, lng, status, error }`
+- `locationUtils.ts`: Haversine distance calculation function `getDistanceKm(lat1,lng1,lat2,lng2)`
+- GPS location in provider localStorage data: `lat` and `lng` fields stored when provider detects shop location
+- 'Detect My Shop Location' button in SignupPage provider form: uses browser GPS to capture & save shop lat/lng
+- 'Get Directions' button on ProviderCard: opens `https://www.google.com/maps/dir/?api=1&destination={lat},{lng}` in new tab
+- 2KM radius filter on HomePage for featured providers section
+- Fallback logic: if 0 providers within 2KM, show message and expand to 5KM then 10KM
+- Search bar on HomePage enhanced to also filter by shop name, category (already exists but just navigates to /search — keep it)
+- Category + Location Sync: CategoryPage filters providers by location (2KM → 5KM fallback)
+- Location status indicator: small pill showing 'GPS चालू है' or 'Location Off'
 
 ### Modify
-- `AdminDashboardPage.tsx`: Add `ebookManager` to `AdminSection` type; add sidebar nav item "📚 eBook Store"; add `EbookManagerSection` component; modify `ProviderApprovals` to also show eBook purchase pending requests with book name visible
-- `HomePage.tsx`: Add eBook store section between CategoryGrid and Featured Providers; read toggle state + books from localStorage
+- `SignupPage.tsx`: add lat/lng to provider registration data; add 'Detect My Shop Location' GPS button
+- `HomePage.tsx`: add location-based filtering for featuredProviders; show radius fallback message
+- `CategoryPage.tsx`: add location-based filtering for category providers
+- `ProviderCard.tsx`: add 'Get Directions' button that links to Google Maps
 
 ### Remove
 - Nothing removed
 
 ## Implementation Plan
-1. Add `EbookManagerSection` component inside `AdminDashboardPage.tsx`:
-   - State: `dz_ebooks` (array of books), `dz_ebook_store_enabled` (bool)
-   - Toggle card at top (ON/OFF store)
-   - 'Add New eBook' button → show inline add form
-   - Book list with Edit/Delete per row
-2. Enhance `ProviderApprovals` component to also render `dz_ebook_purchases` (pending) with book name + Approve/Reject
-3. Add eBook Store section in `HomePage.tsx`:
-   - Read `dz_ebook_store_enabled` and `dz_ebooks`
-   - Horizontal scroll grid of book cards
-   - Buy Now modal with name, mobile, screenshot upload, submit
-   - Per-book lock logic based on buyer mobile matching an approved entry in `dz_ebook_purchases`
-4. Validate and build
+1. Create `src/frontend/src/utils/locationUtils.ts` — Haversine formula + distance helper
+2. Create `src/frontend/src/hooks/useUserLocation.ts` — GPS permission + coordinates hook
+3. Update `SignupPage.tsx` — add lat/lng state, 'Detect My Shop Location' button, save to localStorage
+4. Update `ProviderCard.tsx` — accept optional `distance` prop, add 'Get Directions' button when lat/lng available on profile
+5. Update `HomePage.tsx` — import useUserLocation, filter featuredProviders by 2KM radius, fallback messaging, pass distance to ProviderCard
+6. Update `CategoryPage.tsx` — import useUserLocation, filter providers by 2KM radius with fallback

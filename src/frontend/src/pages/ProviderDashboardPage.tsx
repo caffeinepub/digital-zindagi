@@ -257,6 +257,12 @@ export default function ProviderDashboardPage() {
   };
 
   const handleQrUpload = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error(
+        "Sirf JPG/PNG image hi upload kar sakte hain. PDF allowed nahi hai.",
+      );
+      return;
+    }
     if (!actor) return;
     setUploadingQr(true);
     try {
@@ -306,6 +312,12 @@ export default function ProviderDashboardPage() {
   };
 
   const handlePhotoUpload = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error(
+        "Sirf JPG/PNG image hi upload kar sakte hain. PDF allowed nahi hai.",
+      );
+      return;
+    }
     if (!actor) return;
     setUploadingPhoto(true);
     try {

@@ -30,7 +30,7 @@ import {
   Youtube,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ExternalBlob, type SubscriptionPlan } from "../backend";
 import type { Banner, ProviderProfile, User } from "../backend";
@@ -3658,6 +3658,10 @@ function EbookManagerSection() {
   };
   const [formData, setFormData] = useState(emptyForm);
   const [editFormData, setEditFormData] = useState(emptyForm);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const editPdfInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [editUploadingPdf, setEditUploadingPdf] = useState(false);
 
   const handleToggleStore = () => {
     const next = !storeEnabled;
@@ -3730,6 +3734,39 @@ function EbookManagerSection() {
     saveEbooks(updated);
     setEditingId(null);
     toast.success("Book update ho gayi! ✅");
+  };
+
+  const handlePdfSelect = (
+    file: File,
+    setForm: React.Dispatch<React.SetStateAction<typeof emptyForm>>,
+    setUploading: React.Dispatch<React.SetStateAction<boolean>>,
+  ) => {
+    if (file.type !== "application/pdf") {
+      toast.error("Sirf PDF file hi upload karein");
+      return;
+    }
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast.error(
+        `PDF size 10MB se zyada hai (${(file.size / 1024 / 1024).toFixed(1)}MB). Chhoti file choose karein.`,
+      );
+      return;
+    }
+    setUploading(true);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      setForm((prev) => ({ ...prev, downloadLink: dataUrl }));
+      setUploading(false);
+      toast.success(
+        `PDF upload ho gaya! (${(file.size / 1024).toFixed(0)}KB) ✅`,
+      );
+    };
+    reader.onerror = () => {
+      toast.error("PDF read nahi ho saca");
+      setUploading(false);
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -3822,16 +3859,58 @@ function EbookManagerSection() {
                 }
                 className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring bg-white"
               />
-              <input
-                data-ocid="ebook.input"
-                type="url"
-                placeholder="Download Link (PDF URL)"
-                value={formData.downloadLink}
-                onChange={(e) =>
-                  setFormData((p) => ({ ...p, downloadLink: e.target.value }))
-                }
-                className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring bg-white"
-              />
+              {/* PDF Upload button + fallback URL input */}
+              <div className="space-y-1">
+                <div className="flex gap-2 items-center">
+                  <button
+                    type="button"
+                    onClick={() => pdfInputRef.current?.click()}
+                    disabled={uploadingPdf}
+                    className="flex items-center gap-1.5 bg-red-600 text-white text-xs font-semibold px-3 py-2 rounded-xl hover:bg-red-700 transition-colors disabled:opacity-60"
+                  >
+                    {uploadingPdf ? (
+                      <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <span className="text-sm">📄</span>
+                    )}
+                    Upload PDF
+                  </button>
+                  {formData.downloadLink.startsWith("data:application/pdf") && (
+                    <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 text-xs font-bold px-2 py-1 rounded-lg">
+                      📄 PDF Ready
+                    </span>
+                  )}
+                </div>
+                <input
+                  ref={pdfInputRef}
+                  type="file"
+                  accept="application/pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file)
+                      handlePdfSelect(file, setFormData, setUploadingPdf);
+                    e.target.value = "";
+                  }}
+                />
+                <input
+                  data-ocid="ebook.input"
+                  type="url"
+                  placeholder="Ya yahan PDF URL paste karein"
+                  value={
+                    formData.downloadLink.startsWith("data:application/pdf")
+                      ? "(PDF Uploaded ✅)"
+                      : formData.downloadLink
+                  }
+                  readOnly={formData.downloadLink.startsWith(
+                    "data:application/pdf",
+                  )}
+                  onChange={(e) =>
+                    setFormData((p) => ({ ...p, downloadLink: e.target.value }))
+                  }
+                  className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring bg-white"
+                />
+              </div>
               <textarea
                 data-ocid="ebook.textarea"
                 placeholder="Description (kitaab ke baare mein)"
@@ -3927,19 +4006,69 @@ function EbookManagerSection() {
                       }
                       className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
                     />
-                    <input
-                      data-ocid="ebook.input"
-                      type="url"
-                      placeholder="Download Link (PDF URL)"
-                      value={editFormData.downloadLink}
-                      onChange={(e) =>
-                        setEditFormData((p) => ({
-                          ...p,
-                          downloadLink: e.target.value,
-                        }))
-                      }
-                      className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    />
+                    {/* PDF Upload for edit */}
+                    <div className="space-y-1">
+                      <div className="flex gap-2 items-center">
+                        <button
+                          type="button"
+                          onClick={() => editPdfInputRef.current?.click()}
+                          disabled={editUploadingPdf}
+                          className="flex items-center gap-1.5 bg-red-600 text-white text-xs font-semibold px-3 py-2 rounded-xl hover:bg-red-700 transition-colors disabled:opacity-60"
+                        >
+                          {editUploadingPdf ? (
+                            <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <span className="text-sm">📄</span>
+                          )}
+                          Upload PDF
+                        </button>
+                        {editFormData.downloadLink.startsWith(
+                          "data:application/pdf",
+                        ) && (
+                          <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 text-xs font-bold px-2 py-1 rounded-lg">
+                            📄 PDF Ready
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        ref={editPdfInputRef}
+                        type="file"
+                        accept="application/pdf"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file)
+                            handlePdfSelect(
+                              file,
+                              setEditFormData,
+                              setEditUploadingPdf,
+                            );
+                          e.target.value = "";
+                        }}
+                      />
+                      <input
+                        data-ocid="ebook.input"
+                        type="url"
+                        placeholder="Ya yahan PDF URL paste karein"
+                        value={
+                          editFormData.downloadLink.startsWith(
+                            "data:application/pdf",
+                          )
+                            ? "(PDF Uploaded ✅)"
+                            : editFormData.downloadLink
+                        }
+                        readOnly={editFormData.downloadLink.startsWith(
+                          "data:application/pdf",
+                        )}
+                        onChange={(e) =>
+                          setEditFormData((p) => ({
+                            ...p,
+                            downloadLink: e.target.value,
+                          }))
+                        }
+                        className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </div>
                     <textarea
                       data-ocid="ebook.textarea"
                       placeholder="Description"
@@ -3996,6 +4125,16 @@ function EbookManagerSection() {
                           <p className="font-semibold text-foreground text-sm truncate">
                             {book.title}
                           </p>
+                          {(book.downloadLink.startsWith(
+                            "data:application/pdf",
+                          ) ||
+                            book.downloadLink
+                              .toLowerCase()
+                              .includes(".pdf")) && (
+                            <span className="inline-flex items-center gap-1 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded mt-0.5">
+                              📄 PDF
+                            </span>
+                          )}
                           {book.price && (
                             <span className="inline-block bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-0.5 rounded-full mt-0.5">
                               ₹{book.price}

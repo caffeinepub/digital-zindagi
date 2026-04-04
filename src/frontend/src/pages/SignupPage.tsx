@@ -3,6 +3,7 @@ import {
   Crown,
   Eye,
   EyeOff,
+  LocateFixed,
   QrCode,
   Tv2,
   User2,
@@ -57,6 +58,8 @@ function saveProviderToLocalStorage(provider: {
   createdAt: string;
   email: string;
   address: string;
+  lat?: number;
+  lng?: number;
 }) {
   const existing: (typeof provider)[] = (() => {
     try {
@@ -81,6 +84,38 @@ export default function SignupPage() {
   const [showPwd, setShowPwd] = useState(false);
   const [category, setCategory] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [shopLat, setShopLat] = useState<number | null>(null);
+  const [shopLng, setShopLng] = useState<number | null>(null);
+  const [detectingGPS, setDetectingGPS] = useState(false);
+
+  const handleDetectShopLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error("Aapka browser GPS support nahi karta");
+      return;
+    }
+    setDetectingGPS(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setShopLat(pos.coords.latitude);
+        setShopLng(pos.coords.longitude);
+        setDetectingGPS(false);
+        toast.success(
+          `✅ Location detect ho gayi! (${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)})`,
+        );
+      },
+      (err) => {
+        setDetectingGPS(false);
+        if (err.code === err.PERMISSION_DENIED) {
+          toast.error(
+            "Location permission den zaroori hai — browser settings check karein",
+          );
+        } else {
+          toast.error("GPS se location nahi mili, dobara try karein");
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  };
 
   const { data: adminConfig } = useAdminConfig();
   const navigate = useNavigate();
@@ -142,6 +177,8 @@ export default function SignupPage() {
       createdAt: new Date().toISOString(),
       email: email.trim() || "",
       address: "",
+      lat: shopLat ?? undefined,
+      lng: shopLng ?? undefined,
     };
 
     saveProviderToLocalStorage(providerData);
@@ -437,6 +474,36 @@ export default function SignupPage() {
               {adminConfig.upiId && (
                 <p className="text-xs text-muted-foreground mt-1">
                   UPI: {adminConfig.upiId}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* GPS Shop Location Button — only for providers */}
+          {role === "provider" && (
+            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
+              <p className="text-sm font-semibold text-blue-800 mb-2 flex items-center gap-1.5">
+                <LocateFixed size={15} /> Apni Dukaan Ki Location Set Karein
+              </p>
+              <p className="text-xs text-blue-600 mb-3">
+                Apni dukaan par khade hokar neeche ka button dabayein — GPS se
+                exact location save ho jaayegi.
+              </p>
+              <button
+                type="button"
+                data-ocid="signup.location_button"
+                onClick={handleDetectShopLocation}
+                disabled={detectingGPS}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-60"
+              >
+                <LocateFixed size={15} />
+                {detectingGPS
+                  ? "GPS se Location Dhundh Raha Hai..."
+                  : "Detect My Shop Location"}
+              </button>
+              {shopLat !== null && shopLng !== null && (
+                <p className="text-xs text-green-700 font-semibold mt-2 text-center">
+                  ✅ Location Saved: {shopLat.toFixed(5)}, {shopLng.toFixed(5)}
                 </p>
               )}
             </div>

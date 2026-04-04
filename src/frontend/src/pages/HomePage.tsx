@@ -3,6 +3,7 @@ import {
   Download,
   Facebook,
   Instagram,
+  LocateFixed,
   ShoppingCart,
   X,
   Youtube,
@@ -21,7 +22,9 @@ import {
   useActiveProviders,
   useAllToggles,
 } from "../hooks/useQueries";
+import { useUserLocation } from "../hooks/useUserLocation";
 import { Link, useNavigate } from "../lib/router";
+import { getDistanceKm } from "../utils/locationUtils";
 
 interface SocialSettings {
   facebook: boolean;
@@ -394,6 +397,7 @@ export default function HomePage() {
   const { data: toggles, isLoading: togglesLoading } = useAllToggles();
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const { location: userLocation, status: locationStatus } = useUserLocation();
 
   // 5-tap logo gesture
   const tapCountRef = useRef(0);
@@ -442,7 +446,56 @@ export default function HomePage() {
     }, 2000);
   };
 
-  const featuredProviders = providers?.slice(0, 6) ?? [];
+  // GPS-based filtering: 2KM primary, fallback to 5KM then 10KM
+  const getLocalProviders = () => {
+    if (!providers || providers.length === 0)
+      return { list: [], radiusUsed: 0, hasLocation: false };
+    if (!userLocation) {
+      // No GPS — show first 6
+      return { list: providers.slice(0, 6), radiusUsed: 0, hasLocation: false };
+    }
+    // Read lat/lng from localStorage providers to enrich backend profiles
+    let lsProviders: Array<{ mobile?: string; lat?: number; lng?: number }> =
+      [];
+    try {
+      lsProviders = JSON.parse(localStorage.getItem("dz_providers") ?? "[]");
+    } catch {}
+
+    const enriched = providers.map((p) => {
+      const match = lsProviders.find(
+        (lp) => lp.lat !== undefined && lp.lng !== undefined,
+      );
+      return { ...p, lat: match?.lat, lng: match?.lng };
+    });
+
+    for (const radius of [2, 5, 10]) {
+      const nearby = enriched
+        .filter((p) => p.lat !== undefined && p.lng !== undefined)
+        .map((p) => ({
+          ...p,
+          distanceKm: getDistanceKm(
+            userLocation.lat,
+            userLocation.lng,
+            p.lat!,
+            p.lng!,
+          ),
+        }))
+        .filter((p) => p.distanceKm <= radius)
+        .sort((a, b) => a.distanceKm - b.distanceKm)
+        .slice(0, 6);
+      if (nearby.length > 0) {
+        return { list: nearby, radiusUsed: radius, hasLocation: true };
+      }
+    }
+    // No providers with location — show all (unfiltered)
+    return { list: providers.slice(0, 6), radiusUsed: 0, hasLocation: true };
+  };
+
+  const {
+    list: featuredProviders,
+    radiusUsed,
+    hasLocation: locationUsed,
+  } = getLocalProviders();
 
   // Read lowest 1-month price from category localStorage settings
   const lowestPrice = useMemo(() => {
@@ -717,10 +770,26 @@ export default function HomePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.1 }}
           >
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="font-heading font-bold text-2xl text-foreground">
-                {t("featuredProviders")} ⭐
-              </h2>
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <div>
+                <h2 className="font-heading font-bold text-2xl text-foreground">
+                  {t("featuredProviders")} ⭐
+                </h2>
+                {locationStatus === "granted" && userLocation ? (
+                  <p className="text-xs text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
+                    <LocateFixed size={11} /> GPS चालू है — आस-पास की दुकानें दिख रही
+                    हैं
+                  </p>
+                ) : locationStatus === "denied" ? (
+                  <p className="text-xs text-red-500 font-medium mt-0.5">
+                    📍 Location Permission नहीं मिली — सभी दुकानें दिख रही हैं
+                  </p>
+                ) : locationStatus === "requesting" ? (
+                  <p className="text-xs text-amber-500 font-medium mt-0.5">
+                    📍 Location ढूंढ रहे हैं...
+                  </p>
+                ) : null}
+              </div>
               <Link
                 to="/search"
                 data-ocid="home.link"
@@ -729,6 +798,14 @@ export default function HomePage() {
                 {t("viewAll")} &rarr;
               </Link>
             </div>
+
+            {/* Radius fallback message */}
+            {locationUsed && radiusUsed > 2 && (
+              <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-sm text-amber-700 font-medium">
+                आपके पास अभी 2KM में कोई दुकान नहीं है, दायरा बढ़ा रहे हैं... (
+                {radiusUsed}KM तक की दुकानें दिख रही हैं)
+              </div>
+            )}
 
             {providersLoading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -746,6 +823,17 @@ export default function HomePage() {
                     key={p.userId.toString()}
                     profile={p}
                     index={i + 1}
+                    distanceKm={
+                      "distanceKm" in p
+                        ? (p as { distanceKm: number }).distanceKm
+                        : undefined
+                    }
+                    shopLat={
+                      "lat" in p ? (p as { lat?: number }).lat : undefined
+                    }
+                    shopLng={
+                      "lng" in p ? (p as { lng?: number }).lng : undefined
+                    }
                   />
                 ))}
               </div>

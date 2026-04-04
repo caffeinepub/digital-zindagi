@@ -1,11 +1,13 @@
-import { ShoppingBag } from "lucide-react";
+import { LocateFixed, ShoppingBag } from "lucide-react";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Footer from "../components/Footer";
 import Header from "../components/Header";
 import ProviderCard from "../components/ProviderCard";
 import { useProvidersByCategory } from "../hooks/useQueries";
+import { useUserLocation } from "../hooks/useUserLocation";
 import { useNavigate, useParams } from "../lib/router";
+import { getDistanceKm } from "../utils/locationUtils";
 import { OrderModal } from "./OrdersPage";
 
 const CATEGORY_EMOJIS: Record<string, string> = {
@@ -28,8 +30,56 @@ export default function CategoryPage() {
   const { data: providers, isLoading } = useProvidersByCategory(
     categoryName ?? "",
   );
+  const { location: userLocation, status: locationStatus } = useUserLocation();
   const emoji = CATEGORY_EMOJIS[categoryName ?? ""] ?? "\ud83c\udffb";
   const navigate = useNavigate();
+
+  // Filter providers by GPS radius
+  const filteredProviders = useMemo(() => {
+    if (!providers || providers.length === 0)
+      return { list: [], radiusUsed: 0, locationUsed: false };
+    if (!userLocation)
+      return { list: providers, radiusUsed: 0, locationUsed: false };
+
+    let lsProviders: Array<{ mobile?: string; lat?: number; lng?: number }> =
+      [];
+    try {
+      lsProviders = JSON.parse(localStorage.getItem("dz_providers") ?? "[]");
+    } catch {}
+
+    const enriched = providers.map((p) => {
+      const match = lsProviders.find(
+        (lp) => lp.lat !== undefined && lp.lng !== undefined,
+      );
+      return { ...p, lat: match?.lat, lng: match?.lng };
+    });
+
+    for (const radius of [2, 5, 10]) {
+      const nearby = enriched
+        .filter((p) => p.lat !== undefined && p.lng !== undefined)
+        .map((p) => ({
+          ...p,
+          distanceKm: getDistanceKm(
+            userLocation.lat,
+            userLocation.lng,
+            p.lat!,
+            p.lng!,
+          ),
+        }))
+        .filter((p) => p.distanceKm <= radius)
+        .sort((a, b) => a.distanceKm - b.distanceKm);
+      if (nearby.length > 0) {
+        return { list: nearby, radiusUsed: radius, locationUsed: true };
+      }
+    }
+    return { list: providers, radiusUsed: 0, locationUsed: true };
+  }, [providers, userLocation]);
+
+  const {
+    list: displayProviders,
+    radiusUsed,
+    locationUsed,
+  } = filteredProviders;
 
   const [orderModal, setOrderModal] = useState<{
     open: boolean;
@@ -51,7 +101,13 @@ export default function CategoryPage() {
                 {emoji} {categoryName} Providers
               </h1>
               <p className="text-white/70 text-sm mt-1">
-                Is category ke sare approved providers
+                {locationStatus === "granted" && userLocation ? (
+                  <span className="flex items-center gap-1">
+                    <LocateFixed size={12} /> GPS चालू — आस-पास की दुकानें
+                  </span>
+                ) : (
+                  "Is category ke sare approved providers"
+                )}
               </p>
             </div>
 
@@ -83,15 +139,30 @@ export default function CategoryPage() {
               />
             ))}
           </div>
-        ) : providers && providers.length > 0 ? (
+        ) : displayProviders && displayProviders.length > 0 ? (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
           >
-            {providers.map((p, i) => (
+            {locationUsed && radiusUsed > 2 && (
+              <div className="col-span-full mb-1 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-sm text-amber-700 font-medium">
+                2KM में कोई दुकान नहीं मिली — {radiusUsed}KM तक की दुकानें दिख रही हैं
+              </div>
+            )}
+            {displayProviders.map((p, i) => (
               <div key={p.userId.toString()} className="relative">
-                <ProviderCard profile={p} index={i + 1} />
+                <ProviderCard
+                  profile={p}
+                  index={i + 1}
+                  distanceKm={
+                    "distanceKm" in p
+                      ? (p as { distanceKm: number }).distanceKm
+                      : undefined
+                  }
+                  shopLat={"lat" in p ? (p as { lat?: number }).lat : undefined}
+                  shopLng={"lng" in p ? (p as { lng?: number }).lng : undefined}
+                />
                 <button
                   type="button"
                   data-ocid={`category.primary_button.${i + 1}`}
