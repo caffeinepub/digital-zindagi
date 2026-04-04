@@ -11,18 +11,18 @@ import { getDistanceKm } from "../utils/locationUtils";
 import { OrderModal } from "./OrdersPage";
 
 const CATEGORY_EMOJIS: Record<string, string> = {
-  Scrap: "\u267b\ufe0f",
-  Doctor: "\ud83c\udfe5",
-  Market: "\ud83d\uded2",
-  Labor: "\ud83d\udc77",
-  Electronics: "\ud83d\udcf1",
-  Plumber: "\ud83d\udd27",
-  Carpenter: "\ud83e\udea9",
-  Tutor: "\ud83d\udcda",
-  Electrician: "\u26a1",
-  Painter: "\ud83c\udfa8",
-  Tailor: "\u2702\ufe0f",
-  Salon: "\ud83d\udc87",
+  Scrap: "♻️",
+  Doctor: "🏥",
+  Market: "🛒",
+  Labor: "👷",
+  Electronics: "📱",
+  Plumber: "🔧",
+  Carpenter: "🪩",
+  Tutor: "📚",
+  Electrician: "⚡",
+  Painter: "🎨",
+  Tailor: "✂️",
+  Salon: "💇",
 };
 
 export default function CategoryPage() {
@@ -31,7 +31,7 @@ export default function CategoryPage() {
     categoryName ?? "",
   );
   const { location: userLocation, status: locationStatus } = useUserLocation();
-  const emoji = CATEGORY_EMOJIS[categoryName ?? ""] ?? "\ud83c\udffb";
+  const emoji = CATEGORY_EMOJIS[categoryName ?? ""] ?? "🏻";
   const navigate = useNavigate();
 
   // Filter providers by GPS radius
@@ -119,7 +119,7 @@ export default function CategoryPage() {
                 onClick={() => navigate("/scrap-calculator")}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-full border-2 border-white/50 text-white text-sm font-semibold hover:bg-white/15 hover:border-white transition-colors"
               >
-                \u267b\ufe0f Scrap Calculator
+                ♻️ Scrap Calculator
               </button>
             )}
           </div>

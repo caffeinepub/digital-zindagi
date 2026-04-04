@@ -76,9 +76,16 @@
 
   * {
     @apply border-border;
+    box-sizing: border-box;
   }
   body {
     @apply bg-background text-foreground font-body;
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+  html {
+    overflow-x: hidden;
+    max-width: 100%;
   }
 }
 
@@ -89,6 +96,7 @@
     oklch(0.28 0.095 162) 0%,
     oklch(0.22 0.08 164) 100%
   );
+  width: 100%;
 }
 .bg-emerald-footer {
   background: linear-gradient(
@@ -96,6 +104,7 @@
     oklch(0.2 0.075 164) 0%,
     oklch(0.16 0.06 166) 100%
   );
+  width: 100%;
 }
 .bg-emerald-hero {
   background: linear-gradient(
@@ -104,6 +113,7 @@
     oklch(0.26 0.09 163) 60%,
     oklch(0.22 0.08 165) 100%
   );
+  width: 100%;
 }
 
 /* Custom scrollbar */

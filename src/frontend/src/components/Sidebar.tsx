@@ -112,7 +112,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     label: string;
   }[] = [
     { value: "hinglish", label: "Hinglish" },
-    { value: "hindi", label: "\u0939\u093f\u0902\u0926\u0940" },
+    { value: "hindi", label: "हिंदी" },
     { value: "english", label: "English" },
   ];
 

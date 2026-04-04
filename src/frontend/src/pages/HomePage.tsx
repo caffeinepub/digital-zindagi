@@ -552,28 +552,15 @@ export default function HomePage() {
       <Header />
 
       <main className="flex-1">
-        <section className="bg-emerald-hero px-4 py-4">
+        {/* Hero Section — carousel only, logo removed to avoid duplication with header */}
+        <section
+          className="bg-emerald-hero px-4 py-4 overflow-hidden w-full"
+          onClick={handleLogoTap}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") handleLogoTap();
+          }}
+        >
           <div className="max-w-7xl mx-auto">
-            {/* Logo row */}
-            <div className="flex flex-col items-center mb-3 gap-2">
-              <button
-                type="button"
-                data-ocid="home.button"
-                onClick={handleLogoTap}
-                className="flex items-center gap-2 select-none cursor-pointer bg-transparent border-0 p-2 rounded-xl hover:bg-white/5 transition-colors"
-                aria-label="Digital Zindagi"
-              >
-                <img
-                  src="/assets/generated/dz-logo-transparent.dim_512x512.png"
-                  alt="Digital Zindagi Logo"
-                  className="w-10 h-10 rounded-xl object-contain"
-                />
-                <span className="font-heading font-bold text-white text-2xl tracking-tight">
-                  Digital Zindagi
-                </span>
-              </button>
-            </div>
-
             <HeroCarousel banners={banners} loading={bannersLoading} />
           </div>
         </section>

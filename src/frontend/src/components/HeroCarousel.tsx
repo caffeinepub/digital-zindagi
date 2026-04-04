@@ -18,7 +18,7 @@ const FALLBACK_BANNERS: Banner[] = [
     id: 2n,
     title: "Local Services, Digital Tarike Se",
     subtitle:
-      "Plumber, Carpenter, Doctor \u2014 sab ek jagah. Apne nagar ke best providers dhundein!",
+      "Plumber, Carpenter, Doctor — sab ek jagah. Apne nagar ke best providers dhundein!",
     imageUrl: "/assets/generated/hero-banner-2.dim_1200x400.jpg",
     linkUrl: "/search",
     active: true,
@@ -28,7 +28,7 @@ const FALLBACK_BANNERS: Banner[] = [
     id: 3n,
     title: "Provider Bano, Kamaao!",
     subtitle:
-      "Sirf \u20b9199/maah mein apna digital shop kholein. Lakho logo tak pahuncho.",
+      "Sirf ₹199/maah mein apna digital shop kholein. Lakho logo tak pahuncho.",
     imageUrl: "/assets/generated/hero-banner-3.dim_1200x400.jpg",
     linkUrl: "/signup",
     active: true,
@@ -71,7 +71,7 @@ export default function HeroCarousel({ banners, loading }: Props) {
 
   return (
     <div
-      className="relative w-full overflow-hidden rounded-2xl shadow-emerald"
+      className="relative w-full max-w-full overflow-hidden rounded-2xl shadow-emerald"
       style={{ minHeight: "200px" }}
     >
       <AnimatePresence mode="wait" initial={false}>
@@ -81,10 +81,10 @@ export default function HeroCarousel({ banners, loading }: Props) {
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: dir * -60, opacity: 0 }}
           transition={{ duration: 0.45, ease: "easeInOut" }}
-          className="relative w-full"
+          className="relative w-full max-w-full"
         >
           <div
-            className="w-full h-48 md:h-72 bg-cover bg-center"
+            className="w-full max-w-full h-48 md:h-72 bg-cover bg-center"
             style={{ backgroundImage: `url(${slide.imageUrl})` }}
           >
             <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent" />

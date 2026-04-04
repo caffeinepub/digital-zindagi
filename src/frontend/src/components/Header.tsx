@@ -1,26 +1,16 @@
-import { Globe, Menu, Search, User } from "lucide-react";
+import { Globe, Menu, Settings } from "lucide-react";
 import { useRef, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useLanguage } from "../contexts/LanguageContext";
-import { Link, useNavigate } from "../lib/router";
+import { Link } from "../lib/router";
 import Sidebar from "./Sidebar";
 
 export default function Header() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [query, setQuery] = useState("");
   const [langDropOpen, setLangDropOpen] = useState(false);
-  const navigate = useNavigate();
   const { user } = useAuth();
   const { lang, setLang, t } = useLanguage();
   const langRef = useRef<HTMLDivElement>(null);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (query.trim()) {
-      navigate(`/search?q=${encodeURIComponent(query.trim())}`);
-      setQuery("");
-    }
-  };
 
   const langOptions: {
     value: "hinglish" | "hindi" | "english";
@@ -30,6 +20,9 @@ export default function Header() {
     { value: "hindi", label: "हिंदी" },
     { value: "english", label: "English" },
   ];
+
+  // suppress unused warning — t is used for language label aria
+  void t;
 
   return (
     <>
@@ -48,32 +41,10 @@ export default function Header() {
           <Link
             to="/"
             data-ocid="header.link"
-            className="font-heading font-bold text-white text-lg whitespace-nowrap flex-shrink-0 mr-2"
+            className="font-heading font-bold text-white text-lg whitespace-nowrap flex-1"
           >
             Digital Zindagi
           </Link>
-
-          <form onSubmit={handleSearch} className="flex-1 max-w-lg">
-            <div className="flex items-center bg-white/15 rounded-xl border border-white/20 hover:bg-white/20 transition-colors">
-              <input
-                data-ocid="header.search_input"
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t("search")}
-                className="flex-1 bg-transparent text-white placeholder-white/60 px-3 py-2 text-sm outline-none"
-                aria-label="Search"
-              />
-              <button
-                type="submit"
-                data-ocid="header.submit_button"
-                className="p-2 text-white/80 hover:text-white"
-                aria-label="Search karein"
-              >
-                <Search size={16} />
-              </button>
-            </div>
-          </form>
 
           {/* Language Switcher */}
           <div ref={langRef} className="relative flex-shrink-0">
@@ -82,7 +53,7 @@ export default function Header() {
               data-ocid="header.toggle"
               onClick={() => setLangDropOpen((v) => !v)}
               className="p-2 rounded-lg text-white/90 hover:text-white hover:bg-white/10 transition-colors flex items-center gap-1"
-              aria-label={t("language")}
+              aria-label="Language"
               aria-expanded={langDropOpen}
             >
               <Globe size={18} />
@@ -130,9 +101,9 @@ export default function Header() {
             }
             data-ocid="header.link"
             className="p-2 rounded-lg text-white/90 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0"
-            aria-label="Account"
+            aria-label="Admin Panel"
           >
-            <User size={22} />
+            <Settings size={22} />
           </Link>
         </div>
       </header>

@@ -97,20 +97,18 @@ export default function ProviderSubscribePage() {
   const getPlanPrice = (plan: string): string => {
     // Check category-specific price first
     if (catRowData) {
-      if (plan === "oneMonth" && catRowData.m1) return `\u20b9${catRowData.m1}`;
-      if (plan === "twoMonths" && catRowData.m2)
-        return `\u20b9${catRowData.m2}`;
-      if (plan === "sixMonths" && catRowData.m6)
-        return `\u20b9${catRowData.m6}`;
+      if (plan === "oneMonth" && catRowData.m1) return `₹${catRowData.m1}`;
+      if (plan === "twoMonths" && catRowData.m2) return `₹${catRowData.m2}`;
+      if (plan === "sixMonths" && catRowData.m6) return `₹${catRowData.m6}`;
       if (plan === "twelveMonths" && catRowData.m12)
-        return `\u20b9${catRowData.m12}`;
+        return `₹${catRowData.m12}`;
     }
     // Fall back to global backend pricing
     if (!pricing) return "---";
-    if (plan === "oneMonth") return `\u20b9${pricing.oneMonthPrice}`;
-    if (plan === "twoMonths") return `\u20b9${pricing.oneMonthPrice}`; // no dedicated backend plan
-    if (plan === "sixMonths") return `\u20b9${pricing.threeMonthPrice}`;
-    if (plan === "twelveMonths") return `\u20b9${pricing.twelveMonthPrice}`;
+    if (plan === "oneMonth") return `₹${pricing.oneMonthPrice}`;
+    if (plan === "twoMonths") return `₹${pricing.oneMonthPrice}`; // no dedicated backend plan
+    if (plan === "sixMonths") return `₹${pricing.threeMonthPrice}`;
+    if (plan === "twelveMonths") return `₹${pricing.twelveMonthPrice}`;
     return "---";
   };
 
@@ -235,8 +233,8 @@ export default function ProviderSubscribePage() {
             </h2>
             {catRowData && (
               <p className="text-xs text-muted-foreground mb-6">
-                \u2139\ufe0f Is category ke liye special pricing set hai
-                (Category Manager se).
+                ℹ️ Is category ke liye special pricing set hai (Category Manager
+                se).
               </p>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -257,7 +255,7 @@ export default function ProviderSubscribePage() {
                   >
                     {plan === "twelveMonths" && (
                       <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-full">
-                        Best Value \u2b50
+                        Best Value ⭐
                       </span>
                     )}
                     <h3 className="font-heading font-bold text-lg text-foreground mb-0.5">
@@ -427,7 +425,7 @@ export default function ProviderSubscribePage() {
                 </h3>
                 <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
                   <p className="text-sm text-orange-700 font-medium mb-1">
-                    \ud83d\udce2 Free Plan mein aapki profile par ads dikhenge
+                    📢 Free Plan mein aapki profile par ads dikhenge
                   </p>
                   <p className="text-xs text-orange-600">
                     Kabhi bhi Premium upgrade kar sakte hain.
@@ -435,7 +433,7 @@ export default function ProviderSubscribePage() {
                 </div>
                 <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
                   <p className="text-sm text-green-700 font-medium">
-                    \u2705 Koi payment nahi, turant profile live hogi
+                    ✅ Koi payment nahi, turant profile live hogi
                   </p>
                 </div>
                 <button
