@@ -1,6 +1,5 @@
 import { Globe, Menu, Settings } from "lucide-react";
 import { useRef, useState } from "react";
-import { useAuth } from "../contexts/AuthContext";
 import { useLanguage } from "../contexts/LanguageContext";
 import { Link } from "../lib/router";
 import Sidebar from "./Sidebar";
@@ -8,7 +7,6 @@ import Sidebar from "./Sidebar";
 export default function Header() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [langDropOpen, setLangDropOpen] = useState(false);
-  const { user } = useAuth();
   const { lang, setLang, t } = useLanguage();
   const langRef = useRef<HTMLDivElement>(null);
 
@@ -17,7 +15,7 @@ export default function Header() {
     label: string;
   }[] = [
     { value: "hinglish", label: "Hinglish" },
-    { value: "hindi", label: "हिंदी" },
+    { value: "hindi", label: "\u0939\u093f\u0902\u0926\u0940" },
     { value: "english", label: "English" },
   ];
 
@@ -28,6 +26,7 @@ export default function Header() {
     <>
       <header className="sticky top-0 z-40 bg-emerald-header shadow-emerald">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center gap-3">
+          {/* Left: Hamburger Menu */}
           <button
             type="button"
             data-ocid="header.open_modal_button"
@@ -38,12 +37,26 @@ export default function Header() {
             <Menu size={22} />
           </button>
 
+          {/* Center: Logo + Name */}
           <Link
             to="/"
             data-ocid="header.link"
-            className="font-heading font-bold text-white text-lg whitespace-nowrap flex-1"
+            className="font-heading font-bold text-white text-lg whitespace-nowrap flex-1 flex items-center gap-2 min-w-0"
           >
-            Digital Zindagi
+            <img
+              src="/assets/generated/dz-logo-192.dim_192x192.png"
+              alt="Digital Zindagi Logo"
+              className="w-7 h-7 rounded-md object-contain flex-shrink-0"
+              onError={(e) => {
+                const img = e.currentTarget as HTMLImageElement;
+                img.src =
+                  "/assets/generated/dz-logo-transparent.dim_512x512.png";
+                img.onerror = () => {
+                  img.style.display = "none";
+                };
+              }}
+            />
+            <span className="truncate">Digital Zindagi</span>
           </Link>
 
           {/* Language Switcher */}
@@ -89,19 +102,13 @@ export default function Header() {
             )}
           </div>
 
+          {/* Right: Settings/Admin Icon — always visible, always goes to /login */}
           <Link
-            to={
-              user
-                ? user.role === "provider"
-                  ? "/provider/dashboard"
-                  : user.role === "admin"
-                    ? "/admin/pin"
-                    : "/login"
-                : "/login"
-            }
+            to="/login"
             data-ocid="header.link"
             className="p-2 rounded-lg text-white/90 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0"
-            aria-label="Admin Panel"
+            aria-label="Admin Login"
+            title="Admin Panel"
           >
             <Settings size={22} />
           </Link>

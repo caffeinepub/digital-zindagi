@@ -1,6 +1,6 @@
-// V72: Admin credentials — change these to match your setup
-const ADMIN_PASSWORD = "Admin@2024";
-const ADMIN_PIN = "786786";
+// V147: Admin credentials reset — Temporary Password: 123456, PIN: 12345
+const ADMIN_PASSWORD = "123456";
+const ADMIN_PIN = "12345";
 
 import { Eye, EyeOff, Loader2, Lock, Mail, Phone, Star } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -46,11 +46,11 @@ export default function LoginPage() {
         // Super Admin — 3-step validation
         if (isSuperAdminEmail) {
           if (password !== ADMIN_PASSWORD) {
-            toast.error("Galat password!");
+            toast.error("गलत Password! सही पासवर्ड डालें।");
             return;
           }
           if (secretPin !== ADMIN_PIN) {
-            toast.error("Galat Secret PIN!");
+            toast.error("गलत Secret PIN! सही PIN डालें।");
             return;
           }
           login({
@@ -62,7 +62,7 @@ export default function LoginPage() {
             isSuperAdmin: true,
           });
           sessionStorage.setItem("adminVerified", "true");
-          toast.success("Welcome, Super Admin!");
+          toast.success("स्वागत है, Super Admin!");
           navigate("/admin");
           return;
         }
@@ -97,14 +97,14 @@ export default function LoginPage() {
             mobile: managerMatch.mobile,
             email: managerMatch.email,
           });
-          toast.success(`Welcome, Manager ${managerMatch.name}!`);
+          toast.success(`स्वागत है, Manager ${managerMatch.name}!`);
           navigate("/manager");
           return;
         }
 
-        toast.error("Email se koi account nahi mila. Mobile se login karein.");
+        toast.error("Email से कोई account नहीं मिला। Mobile से login करें।");
       } catch (err: any) {
-        toast.error(err?.message ?? "Login fail ho gaya");
+        toast.error(err?.message ?? "Login fail हो गया");
       } finally {
         setLoading(false);
       }
@@ -117,7 +117,7 @@ export default function LoginPage() {
       return;
     }
     if (!actor) {
-      toast.error("Backend se connect nahi ho pa raha, thoda wait karein");
+      toast.error("Backend से connect नहीं हो पा रहा, थोड़ा wait करें");
       return;
     }
     setLoading(true);
@@ -151,7 +151,7 @@ export default function LoginPage() {
           mobile: managerMatch.mobile,
           email: managerMatch.email,
         });
-        toast.success(`Welcome, Manager ${managerMatch.name}!`);
+        toast.success(`स्वागत है, Manager ${managerMatch.name}!`);
         navigate("/manager");
         return;
       }
@@ -166,12 +166,12 @@ export default function LoginPage() {
         email: undefined,
         isSuperAdmin: false,
       });
-      toast.success(`Welcome back, ${user.name}!`);
+      toast.success(`स्वागत है, ${user.name}!`);
       if (user.role === UserRole.admin) navigate("/admin");
       else if (user.role === UserRole.provider) navigate("/provider/dashboard");
       else navigate("/");
     } catch (err: any) {
-      toast.error(err?.message ?? "Login fail ho gaya. Dobara try karein.");
+      toast.error(err?.message ?? "Login fail हो गया। दोबारा try करें।");
     } finally {
       setLoading(false);
     }
@@ -193,7 +193,7 @@ export default function LoginPage() {
             data-ocid="login.link"
             className="text-white/70 text-sm hover:text-white mb-4 block"
           >
-            &larr; Wapas Jao
+            &larr; वापस जाओ
           </Link>
           {/* Digital Zindagi Logo */}
           <div className="flex justify-center mb-4">
@@ -201,13 +201,17 @@ export default function LoginPage() {
               src="/assets/generated/dz-logo-transparent.dim_512x512.png"
               alt="Digital Zindagi Logo"
               className="w-16 h-16 rounded-full object-cover"
+              onError={(e) => {
+                const img = e.currentTarget as HTMLImageElement;
+                img.src = "/assets/generated/dz-logo-192.dim_192x192.png";
+              }}
             />
           </div>
           <h1 className="font-heading font-bold text-white text-3xl">
-            Login Karein
+            लॉगिन करें
           </h1>
           <p className="text-white/70 text-sm mt-1">
-            Digital Zindagi mein swagat hai
+            Digital Zindagi में स्वागत है
           </p>
         </div>
 
@@ -225,7 +229,7 @@ export default function LoginPage() {
               }`}
             >
               <Phone size={14} />
-              Mobile Se Login
+              Mobile से Login
             </button>
             <button
               type="button"
@@ -238,7 +242,7 @@ export default function LoginPage() {
               }`}
             >
               <Mail size={14} />
-              Email Se Login
+              Email से Login
             </button>
           </div>
 
@@ -272,7 +276,7 @@ export default function LoginPage() {
                 type="tel"
                 value={mobile}
                 onChange={(e) => setMobile(e.target.value)}
-                placeholder="Apna mobile number daalein"
+                placeholder="अपना mobile number डालें"
                 className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring bg-white"
                 autoComplete="tel"
               />
@@ -291,7 +295,7 @@ export default function LoginPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="Email address daalein"
+                placeholder="Email address डालें"
                 className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring bg-white"
                 autoComplete="email"
               />
@@ -312,7 +316,7 @@ export default function LoginPage() {
                 type={showPwd ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Apna password daalein"
+                placeholder="अपना password डालें"
                 className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring bg-white pr-10"
                 autoComplete="current-password"
               />
@@ -340,7 +344,7 @@ export default function LoginPage() {
                   className="block text-sm font-medium text-foreground mb-1.5"
                   htmlFor="secret-pin"
                 >
-                  Secret PIN (Admin Only)
+                  Secret PIN (सिर्फ Admin के लिए)
                 </label>
                 <div className="relative">
                   <Lock
@@ -354,7 +358,7 @@ export default function LoginPage() {
                     inputMode="text"
                     value={secretPin}
                     onChange={(e) => setSecretPin(e.target.value)}
-                    placeholder="Secret PIN daalein"
+                    placeholder="Secret PIN डालें"
                     className="w-full border border-primary/40 rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring bg-accent/30"
                     autoComplete="one-time-code"
                   />
@@ -370,7 +374,7 @@ export default function LoginPage() {
             className="w-full bg-primary text-primary-foreground font-bold py-3 rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {loading && <Loader2 size={16} className="animate-spin" />}
-            {loading ? "Log In Ho Raha Hai..." : "Login Karein"}
+            {loading ? "लॉगिन हो रहा है..." : "लॉगिन करें"}
           </button>
 
           <div className="flex items-center justify-between text-sm flex-wrap gap-2">
@@ -379,14 +383,14 @@ export default function LoginPage() {
               data-ocid="login.link"
               className="text-primary hover:underline"
             >
-              Password Bhool Gaye?
+              Password भूल गए?
             </Link>
             <Link
               to="/signup"
               data-ocid="login.link"
               className="text-primary hover:underline"
             >
-              Account Banao
+              Account बनाओ
             </Link>
           </div>
         </form>

@@ -1,80 +1,112 @@
 import { motion } from "motion/react";
+import { useEffect, useState } from "react";
 import { Link } from "../lib/router";
 
 export const ALL_CATEGORIES = [
   {
     name: "Scrap",
     hinglish: "Kabadiwala",
-    emoji: "\u267b\ufe0f",
+    emoji: "♻️",
     color: "from-green-400 to-green-600",
   },
   {
     name: "Doctor",
     hinglish: "Online Doctor",
-    emoji: "\ud83c\udfe5",
+    emoji: "🏥",
     color: "from-red-400 to-red-600",
   },
   {
     name: "Market",
     hinglish: "Local Market",
-    emoji: "\ud83d\uded2",
+    emoji: "🛒",
     color: "from-orange-400 to-orange-600",
   },
   {
     name: "Labor",
     hinglish: "Expert Labor",
-    emoji: "\ud83d\udc77",
+    emoji: "👷",
     color: "from-yellow-400 to-yellow-600",
   },
   {
     name: "Electronics",
     hinglish: "Electronics",
-    emoji: "\ud83d\udcf1",
+    emoji: "📱",
     color: "from-blue-400 to-blue-600",
   },
   {
     name: "Plumber",
     hinglish: "Plumber",
-    emoji: "\ud83d\udd27",
+    emoji: "🔧",
     color: "from-cyan-400 to-cyan-600",
   },
   {
     name: "Carpenter",
     hinglish: "Carpenter",
-    emoji: "\ud83e\ude9a",
+    emoji: "🪚",
     color: "from-amber-400 to-amber-600",
   },
   {
     name: "Tutor",
     hinglish: "Online Tutor",
-    emoji: "\ud83d\udcda",
+    emoji: "📚",
     color: "from-purple-400 to-purple-600",
   },
   {
     name: "Electrician",
     hinglish: "Electrician",
-    emoji: "\u26a1",
+    emoji: "⚡",
     color: "from-yellow-300 to-yellow-500",
   },
   {
     name: "Painter",
     hinglish: "Painter",
-    emoji: "\ud83c\udfa8",
+    emoji: "🎨",
     color: "from-pink-400 to-pink-600",
   },
   {
     name: "Tailor",
     hinglish: "Darzi",
-    emoji: "\u2702\ufe0f",
+    emoji: "✂️",
     color: "from-violet-400 to-violet-600",
   },
   {
     name: "Salon",
     hinglish: "Salon",
-    emoji: "\ud83d\udc87",
+    emoji: "💇",
     color: "from-rose-400 to-rose-600",
   },
 ];
+
+interface AdminCategory {
+  id: string | number;
+  name: string;
+  emoji?: string;
+  color?: string;
+  enabled?: boolean;
+  hinglish?: string;
+}
+
+function readAdminCategories(): AdminCategory[] {
+  try {
+    return JSON.parse(localStorage.getItem("dz_categories") ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function mergeCategories(adminCats: AdminCategory[]) {
+  const existingNames = new Set(ALL_CATEGORIES.map((c) => c.name));
+  const filtered = adminCats
+    .filter((c) => c.enabled !== false)
+    .filter((c) => !existingNames.has(c.name))
+    .map((c) => ({
+      name: c.name,
+      hinglish: c.hinglish || c.name,
+      emoji: c.emoji || "🏪",
+      color: c.color || "from-emerald-400 to-emerald-600",
+    }));
+  return [...ALL_CATEGORIES, ...filtered];
+}
 
 interface Props {
   toggles?: [string, boolean][];
@@ -82,17 +114,27 @@ interface Props {
 }
 
 export default function CategoryGrid({ toggles, loading }: Props) {
+  const [adminCats, setAdminCats] =
+    useState<AdminCategory[]>(readAdminCategories);
+
+  // Re-read admin categories when the window regains focus
+  useEffect(() => {
+    const onFocus = () => setAdminCats(readAdminCategories());
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
+  const merged = mergeCategories(adminCats);
+
   const enabledNames = toggles
     ? new Set(toggles.filter(([, v]) => v).map(([k]) => k))
     : null;
 
   const visible = enabledNames
-    ? ALL_CATEGORIES.filter(
-        (c) => enabledNames.has(c.name) || enabledNames.size === 0,
-      )
-    : ALL_CATEGORIES;
+    ? merged.filter((c) => enabledNames.has(c.name) || enabledNames.size === 0)
+    : merged;
 
-  const displayCats = visible.length > 0 ? visible : ALL_CATEGORIES;
+  const displayCats = visible.length > 0 ? visible : merged;
 
   if (loading) {
     return (

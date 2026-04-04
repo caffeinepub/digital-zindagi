@@ -82,10 +82,17 @@
     @apply bg-background text-foreground font-body;
     overflow-x: hidden;
     max-width: 100%;
+    width: 100%;
   }
   html {
     overflow-x: hidden;
     max-width: 100%;
+    width: 100%;
+  }
+  #root {
+    overflow-x: hidden;
+    max-width: 100%;
+    width: 100%;
   }
 }
 
