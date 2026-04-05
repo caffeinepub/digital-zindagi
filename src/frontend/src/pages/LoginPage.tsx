@@ -29,6 +29,11 @@ export default function LoginPage() {
   const { actor } = useActor();
   const navigate = useNavigate();
 
+  // Welcome message from admin settings
+  const welcomeMessage =
+    localStorage.getItem("dz_welcome_message") ??
+    "Digital Zindagi में आपका स्वागत है";
+
   const isSuperAdminEmail =
     email.trim().toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
 
@@ -117,14 +122,13 @@ export default function LoginPage() {
       return;
     }
     if (!actor) {
-      toast.error("Backend से connect नहीं हो पा रहा, थोड़ा wait करें");
+      toast.error("Backend से connect नहीं हो पा रहा, थोड़ा wait करें");
       return;
     }
     setLoading(true);
     try {
       const hash = await hashPassword(password);
 
-      // Check manager by mobile
       const managers: {
         id: string;
         name: string;
@@ -195,31 +199,41 @@ export default function LoginPage() {
           >
             &larr; वापस जाओ
           </Link>
-          {/* Digital Zindagi Logo */}
+          {/* Digital Zindagi Logo — round with gold ring */}
           <div className="flex justify-center mb-4">
-            <img
-              src="/logo.png"
-              alt="Digital Zindagi Logo"
-              className="w-16 h-16 rounded-full object-contain"
-              onError={(e) => {
-                const img = e.currentTarget as HTMLImageElement;
-                img.src =
-                  "/assets/generated/dz-logo-transparent.dim_512x512.png";
-                img.onerror = () => {
-                  img.src = "/assets/generated/dz-logo-192.dim_192x192.png";
-                  img.onerror = () => {
-                    img.style.display = "none";
-                  };
-                };
+            <div
+              style={{
+                background: "#ffffff",
+                borderRadius: "50%",
+                padding: "4px",
+                width: "72px",
+                height: "72px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0 0 0 2.5px #d4af37, 0 4px 20px rgba(0,0,0,0.3)",
               }}
-            />
+            >
+              <img
+                src="/assets/generated/dz-logo-round-premium-transparent.dim_512x512.png"
+                alt="Digital Zindagi Logo"
+                style={{
+                  width: "60px",
+                  height: "60px",
+                  objectFit: "contain",
+                  borderRadius: "50%",
+                  display: "block",
+                }}
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = "/logo.png";
+                }}
+              />
+            </div>
           </div>
           <h1 className="font-heading font-bold text-white text-3xl">
             लॉगिन करें
           </h1>
-          <p className="text-white/70 text-sm mt-1">
-            Digital Zindagi में स्वागत है
-          </p>
+          <p className="text-white/70 text-sm mt-1">{welcomeMessage}</p>
         </div>
 
         {/* Mode Toggle */}
@@ -337,7 +351,6 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Secret PIN — only for Super Admin email in email mode */}
           <AnimatePresence>
             {mode === "email" && isSuperAdminEmail && (
               <motion.div

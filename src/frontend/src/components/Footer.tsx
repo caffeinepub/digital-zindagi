@@ -1,6 +1,8 @@
 import { Facebook, Instagram, Mail, MapPin, Phone, Send } from "lucide-react";
+import { useCallback, useState } from "react";
 import { useLanguage } from "../contexts/LanguageContext";
 import { Link } from "../lib/router";
+import { useSettingsListener } from "../utils/settingsSync";
 
 function getSocialLinks() {
   try {
@@ -25,13 +27,36 @@ function getFounder(): { name?: string; photo?: string } {
   }
 }
 
+function readContactInfo() {
+  return {
+    phone: localStorage.getItem("dz_contact_phone") ?? "+91 98765 43210",
+    email:
+      localStorage.getItem("dz_contact_email") ?? "support@digitalzindagi.in",
+    address: localStorage.getItem("dz_contact_address") ?? "Bharat, India",
+    copyright: localStorage.getItem("dz_footer_copyright") ?? "",
+  };
+}
+
 export default function Footer() {
   const { t } = useLanguage();
-  const social = getSocialLinks();
-  const founder = getFounder();
+  const [social, setSocial] = useState(getSocialLinks);
+  const [founder, setFounder] = useState(getFounder);
+  const [contactInfo, setContactInfo] = useState(readContactInfo);
+
+  const reloadSettings = useCallback(() => {
+    setSocial(getSocialLinks());
+    setFounder(getFounder());
+    setContactInfo(readContactInfo());
+  }, []);
+
+  useSettingsListener(reloadSettings);
 
   const hasSocial = social.instagram || social.facebook || social.telegram;
   const hasFounder = founder.name || founder.photo;
+  const year = new Date().getFullYear();
+  const copyrightText = contactInfo.copyright
+    ? contactInfo.copyright
+    : `\u00a9 ${year} Digital Zindagi`;
 
   return (
     <footer className="bg-emerald-footer mt-12">
@@ -120,24 +145,22 @@ export default function Footer() {
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-white/70 text-sm">
                 <Phone size={14} className="flex-shrink-0" />
-                <span>+91 98765 43210</span>
+                <span>{contactInfo.phone}</span>
               </div>
               <div className="flex items-center gap-2 text-white/70 text-sm">
                 <Mail size={14} className="flex-shrink-0" />
-                <span>support@digitalzindagi.in</span>
+                <span>{contactInfo.email}</span>
               </div>
               <div className="flex items-center gap-2 text-white/70 text-sm">
                 <MapPin size={14} className="flex-shrink-0" />
-                <span>Bharat, India</span>
+                <span>{contactInfo.address}</span>
               </div>
             </div>
           </div>
         </div>
 
         <div className="border-t border-white/10 mt-8 pt-6 text-center">
-          <p className="text-white/50 text-sm">
-            &copy; {new Date().getFullYear()} Digital Zindagi
-          </p>
+          <p className="text-white/50 text-sm">{copyrightText}</p>
           <div className="mt-3">
             <Link
               to="/manager-login"

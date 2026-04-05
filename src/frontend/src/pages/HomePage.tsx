@@ -9,7 +9,7 @@ import {
   Youtube,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import CategoryGrid, { ALL_CATEGORIES } from "../components/CategoryGrid";
 import Footer from "../components/Footer";
@@ -25,6 +25,13 @@ import {
 import { useUserLocation } from "../hooks/useUserLocation";
 import { Link, useNavigate } from "../lib/router";
 import { getDistanceKm } from "../utils/locationUtils";
+import { useSettingsListener } from "../utils/settingsSync";
+
+interface CustomSocialPlatform {
+  key: string;
+  label: string;
+  icon: string;
+}
 
 interface SocialSettings {
   facebook: boolean;
@@ -35,6 +42,14 @@ interface SocialSettings {
   instagramUrl: string;
   whatsappUrl: string;
   youtubeUrl: string;
+  _customPlatforms?: CustomSocialPlatform[];
+}
+
+interface AffiliateLink {
+  id: string;
+  title: string;
+  url: string;
+  emoji: string;
 }
 
 interface AffiliateSettings {
@@ -42,6 +57,7 @@ interface AffiliateSettings {
   title: string;
   description: string;
   link: string;
+  affiliateLinks: AffiliateLink[];
 }
 
 function readSocialSettings(): SocialSettings {
@@ -68,6 +84,7 @@ function readSocialSettings(): SocialSettings {
       instagramUrl: parsed.instagramUrl ?? "",
       whatsappUrl: parsed.whatsappUrl ?? "",
       youtubeUrl: parsed.youtubeUrl ?? "",
+      _customPlatforms: parsed._customPlatforms ?? [],
     };
   } catch {
     return {
@@ -92,6 +109,7 @@ function readAffiliateSettings(): AffiliateSettings {
         title: "Affiliate Marketing",
         description: "Paisa kamao Digital Zindagi se!",
         link: "",
+        affiliateLinks: [],
       };
     const parsed = JSON.parse(raw);
     return {
@@ -99,6 +117,7 @@ function readAffiliateSettings(): AffiliateSettings {
       title: parsed.title ?? "Affiliate Marketing",
       description: parsed.description ?? "Paisa kamao Digital Zindagi se!",
       link: parsed.link ?? "",
+      affiliateLinks: parsed.affiliateLinks ?? [],
     };
   } catch {
     return {
@@ -106,6 +125,7 @@ function readAffiliateSettings(): AffiliateSettings {
       title: "Affiliate Marketing",
       description: "Paisa kamao Digital Zindagi se!",
       link: "",
+      affiliateLinks: [],
     };
   }
 }
@@ -147,8 +167,24 @@ function readEbookPurchasesHome(): EBookPurchase[] {
   }
 }
 
-function isEbookStoreEnabled(): boolean {
-  return localStorage.getItem("dz_ebook_store_enabled") === "true";
+function readHomepageSettings() {
+  return {
+    ebookStoreEnabled:
+      localStorage.getItem("dz_ebook_store_enabled") === "true",
+    showRateCalculator:
+      localStorage.getItem("dz_show_rate_calculator") !== "false",
+    showHeroCarousel: localStorage.getItem("dz_show_hero_carousel") !== "false",
+    showCategoryGrid: localStorage.getItem("dz_show_category_grid") !== "false",
+    showProviders: localStorage.getItem("dz_show_providers") !== "false",
+    showRegisterBanner:
+      localStorage.getItem("dz_show_register_banner") !== "false",
+    tagline:
+      localStorage.getItem("dz_app_tagline") ??
+      "डिजिटल जिंदगी से जुड़ो और लोकल सर्विस का फायदा उठाओ",
+    announcementEnabled:
+      localStorage.getItem("dz_announcement_enabled") === "true",
+    announcementText: localStorage.getItem("dz_announcement") ?? "",
+  };
 }
 
 // ---- eBook Buy Modal ----
@@ -399,52 +435,31 @@ export default function HomePage() {
   const navigate = useNavigate();
   const { location: userLocation, status: locationStatus } = useUserLocation();
 
-  // 5-tap logo gesture
-  const tapCountRef = useRef(0);
-  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const [socialSettings, setSocialSettings] =
     useState<SocialSettings>(readSocialSettings);
   const [affiliateSettings, setAffiliateSettings] = useState<AffiliateSettings>(
     readAffiliateSettings,
   );
-  const [ebookStoreEnabled, setEbookStoreEnabled] =
-    useState(isEbookStoreEnabled);
   const [ebooks, setEbooks] = useState<EBook[]>(readEbooksHome);
   const [buyModalBook, setBuyModalBook] = useState<EBook | null>(null);
+  const [homepageSettings, setHomepageSettings] =
+    useState(readHomepageSettings);
+
+  const reloadSettings = useCallback(() => {
+    setSocialSettings(readSocialSettings());
+    setAffiliateSettings(readAffiliateSettings());
+    setEbooks(readEbooksHome());
+    setHomepageSettings(readHomepageSettings());
+  }, []);
 
   // Re-read settings on focus (in case admin changed them)
   useEffect(() => {
-    const onFocus = () => {
-      setSocialSettings(readSocialSettings());
-      setAffiliateSettings(readAffiliateSettings());
-      setEbookStoreEnabled(isEbookStoreEnabled());
-      setEbooks(readEbooksHome());
-    };
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, []);
+    window.addEventListener("focus", reloadSettings);
+    return () => window.removeEventListener("focus", reloadSettings);
+  }, [reloadSettings]);
 
-  const handleLogoTap = () => {
-    tapCountRef.current += 1;
-
-    if (tapCountRef.current === 3) {
-      toast("Admin gateway...", { duration: 1000 });
-    }
-
-    if (tapCountRef.current >= 5) {
-      tapCountRef.current = 0;
-      if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
-      navigate("/admin");
-      return;
-    }
-
-    // Reset after 2 seconds of no taps
-    if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
-    tapTimerRef.current = setTimeout(() => {
-      tapCountRef.current = 0;
-    }, 2000);
-  };
+  // Real-time sync listener
+  useSettingsListener(reloadSettings);
 
   // GPS-based filtering: 2KM primary, fallback to 5KM then 10KM
   const getLocalProviders = () => {
@@ -455,17 +470,28 @@ export default function HomePage() {
       return { list: providers.slice(0, 6), radiusUsed: 0, hasLocation: false };
     }
     // Read lat/lng from localStorage providers to enrich backend profiles
-    let lsProviders: Array<{ mobile?: string; lat?: number; lng?: number }> =
-      [];
+    type LsProvider = { mobile?: string; lat?: number; lng?: number };
+    type EnrichedProvider = (typeof providers)[0] & {
+      lat?: number;
+      lng?: number;
+      distanceKm?: number;
+    };
+    let lsProviders: LsProvider[] = [];
     try {
       lsProviders = JSON.parse(localStorage.getItem("dz_providers") ?? "[]");
     } catch {}
 
-    const enriched = providers.map((p) => {
+    const enriched: EnrichedProvider[] = providers.map((p) => {
+      // FIX: match by mobile, not just find first with GPS
+      const pAny = p as unknown as { mobile?: string };
       const match = lsProviders.find(
-        (lp) => lp.lat !== undefined && lp.lng !== undefined,
+        (lp) =>
+          lp.mobile === pAny.mobile &&
+          lp.lat !== undefined &&
+          lp.lng !== undefined,
       );
-      return { ...p, lat: match?.lat, lng: match?.lng };
+      if (!match) return { ...p } as EnrichedProvider;
+      return { ...p, lat: match.lat, lng: match.lng } as EnrichedProvider;
     });
 
     for (const radius of [2, 5, 10]) {
@@ -476,8 +502,8 @@ export default function HomePage() {
           distanceKm: getDistanceKm(
             userLocation.lat,
             userLocation.lng,
-            p.lat!,
-            p.lng!,
+            p.lat as number,
+            p.lng as number,
           ),
         }))
         .filter((p) => p.distanceKm <= radius)
@@ -547,32 +573,55 @@ export default function HomePage() {
     },
   ].filter((p) => p.enabled);
 
+  const customSocialPlatforms = (socialSettings._customPlatforms ?? [])
+    .filter((p) => socialSettings[p.key as keyof SocialSettings])
+    .map((p) => ({
+      key: p.key,
+      enabled: true,
+      url:
+        (socialSettings[`${p.key}Url` as keyof SocialSettings] as string) ?? "",
+      icon: <span style={{ fontSize: "22px" }}>{p.icon}</span>,
+      color: "bg-gray-600",
+      label: p.label,
+    }));
+
+  const allEnabledSocialPlatforms = [
+    ...enabledSocialPlatforms,
+    ...customSocialPlatforms,
+  ];
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
 
       <main className="flex-1">
         {/* Hero Section — carousel only, logo removed to avoid duplication with header */}
-        <section
-          className="bg-emerald-hero px-4 py-4 overflow-hidden w-full"
-          onClick={handleLogoTap}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") handleLogoTap();
-          }}
-        >
-          <div className="max-w-7xl mx-auto">
-            <HeroCarousel banners={banners} loading={bannersLoading} />
-          </div>
-        </section>
+        {homepageSettings.showHeroCarousel && (
+          <section className="bg-emerald-hero px-4 py-4 overflow-hidden w-full">
+            <div className="max-w-7xl mx-auto">
+              <HeroCarousel banners={banners} loading={bannersLoading} />
+            </div>
+          </section>
+        )}
 
         {/* Tagline Banner */}
         <section className="bg-emerald-header px-4 py-3">
           <div className="max-w-7xl mx-auto text-center">
             <p className="text-white font-semibold text-base sm:text-lg tracking-wide">
-              डिजिटल जिंदगी से जुड़ो और लोकल सर्विस का फायदा उठाओ
+              {homepageSettings.tagline}
             </p>
           </div>
         </section>
+
+        {/* Announcement Marquee */}
+        {homepageSettings.announcementEnabled &&
+          homepageSettings.announcementText && (
+            <div className="bg-amber-50 border-y border-amber-200 px-4 py-2 overflow-hidden">
+              <p className="text-amber-800 text-sm font-medium animate-marquee whitespace-nowrap">
+                📢 {homepageSettings.announcementText}
+              </p>
+            </div>
+          )}
 
         <section className="bg-white border-b border-border px-4 py-4">
           <div className="max-w-2xl mx-auto">
@@ -583,7 +632,7 @@ export default function HomePage() {
                   e.currentTarget.elements.namedItem("q") as HTMLInputElement
                 ).value;
                 if (q.trim())
-                  window.location.href = `/search?q=${encodeURIComponent(q.trim())}`;
+                  navigate(`/search?q=${encodeURIComponent(q.trim())}`);
               }}
               className="flex gap-2"
             >
@@ -607,38 +656,40 @@ export default function HomePage() {
         </section>
 
         {/* Rate Calculator — Primary Feature Button */}
-        <section className="max-w-7xl mx-auto px-4 pt-6 pb-2">
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35 }}
-          >
-            <button
-              type="button"
-              onClick={() => navigate("/scrap-calculator")}
-              data-ocid="home.rate_calculator_button"
-              className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white p-5 flex items-center gap-4 shadow-lg hover:shadow-xl hover:from-emerald-700 hover:to-emerald-600 transition-all active:scale-[0.99]"
+        {homepageSettings.showRateCalculator && (
+          <section className="max-w-7xl mx-auto px-4 pt-6 pb-2">
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35 }}
             >
-              <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center flex-shrink-0">
-                <Calculator size={32} className="text-white" />
-              </div>
-              <div className="text-left flex-1">
-                <p className="font-heading font-bold text-xl">
-                  🧮 Rate Calculator
-                </p>
-                <p className="text-white/80 text-sm mt-0.5">
-                  Scrap ka sahi daam pata karein — Lohaa, Kaagaz, Taamba
-                </p>
-              </div>
-              <div className="ml-auto text-white/60 text-2xl flex-shrink-0">
-                →
-              </div>
-            </button>
-          </motion.div>
-        </section>
+              <button
+                type="button"
+                onClick={() => navigate("/scrap-calculator")}
+                data-ocid="home.rate_calculator_button"
+                className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white p-5 flex items-center gap-4 shadow-lg hover:shadow-xl hover:from-emerald-700 hover:to-emerald-600 transition-all active:scale-[0.99]"
+              >
+                <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center flex-shrink-0">
+                  <Calculator size={32} className="text-white" />
+                </div>
+                <div className="text-left flex-1">
+                  <p className="font-heading font-bold text-xl">
+                    🧮 Rate Calculator
+                  </p>
+                  <p className="text-white/80 text-sm mt-0.5">
+                    Scrap ka sahi daam pata karein — Lohaa, Kaagaz, Taamba
+                  </p>
+                </div>
+                <div className="ml-auto text-white/60 text-2xl flex-shrink-0">
+                  &rarr;
+                </div>
+              </button>
+            </motion.div>
+          </section>
+        )}
 
         {/* eBook Store Section */}
-        {ebookStoreEnabled && ebooks.length > 0 && (
+        {homepageSettings.ebookStoreEnabled && ebooks.length > 0 && (
           <section className="max-w-7xl mx-auto px-4 pt-2 pb-6">
             <motion.div
               initial={{ opacity: 0, y: 16 }}
@@ -736,139 +787,147 @@ export default function HomePage() {
           />
         )}
 
-        <section className="max-w-7xl mx-auto px-4 py-8">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-          >
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="font-heading font-bold text-2xl text-foreground">
-                {t("popularServices")}
-              </h2>
-            </div>
-            <CategoryGrid toggles={toggles} loading={togglesLoading} />
-          </motion.div>
-        </section>
-
-        <section className="max-w-7xl mx-auto px-4 py-8 border-t border-border">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.1 }}
-          >
-            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-              <div>
+        {homepageSettings.showCategoryGrid && (
+          <section className="max-w-7xl mx-auto px-4 py-8">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              <div className="flex items-center justify-between mb-5">
                 <h2 className="font-heading font-bold text-2xl text-foreground">
-                  {t("featuredProviders")} ⭐
+                  {t("popularServices")}
                 </h2>
-                {locationStatus === "granted" && userLocation ? (
-                  <p className="text-xs text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
-                    <LocateFixed size={11} /> GPS चालू है — आस-पास की दुकानें दिख रही
-                    हैं
-                  </p>
-                ) : locationStatus === "denied" ? (
-                  <p className="text-xs text-red-500 font-medium mt-0.5">
-                    📍 Location Permission नहीं मिली — सभी दुकानें दिख रही हैं
-                  </p>
-                ) : locationStatus === "requesting" ? (
-                  <p className="text-xs text-amber-500 font-medium mt-0.5">
-                    📍 Location ढूंढ रहे हैं...
-                  </p>
-                ) : null}
               </div>
-              <Link
-                to="/search"
-                data-ocid="home.link"
-                className="text-sm text-primary font-medium hover:underline"
-              >
-                {t("viewAll")} &rarr;
-              </Link>
-            </div>
+              <CategoryGrid toggles={toggles} loading={togglesLoading} />
+            </motion.div>
+          </section>
+        )}
 
-            {/* Radius fallback message */}
-            {locationUsed && radiusUsed > 2 && (
-              <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-sm text-amber-700 font-medium">
-                आपके पास अभी 2KM में कोई दुकान नहीं है, दायरा बढ़ा रहे हैं... (
-                {radiusUsed}KM तक की दुकानें दिख रही हैं)
-              </div>
-            )}
-
-            {providersLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {Array.from({ length: 6 }, (_, i) => `skel-${i}`).map((sk) => (
-                  <div
-                    key={sk}
-                    className="h-40 bg-gray-100 animate-pulse rounded-2xl"
-                  />
-                ))}
-              </div>
-            ) : featuredProviders.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {featuredProviders.map((p, i) => (
-                  <ProviderCard
-                    key={p.userId.toString()}
-                    profile={p}
-                    index={i + 1}
-                    distanceKm={
-                      "distanceKm" in p
-                        ? (p as { distanceKm: number }).distanceKm
-                        : undefined
-                    }
-                    shopLat={
-                      "lat" in p ? (p as { lat?: number }).lat : undefined
-                    }
-                    shopLng={
-                      "lng" in p ? (p as { lng?: number }).lng : undefined
-                    }
-                  />
-                ))}
-              </div>
-            ) : (
-              <div
-                data-ocid="providers.empty_state"
-                className="text-center py-12 text-muted-foreground"
-              >
-                <p className="text-4xl mb-3">🏪</p>
-                <p className="font-medium">Abhi koi provider nahi hai</p>
-                <p className="text-sm mt-1">
-                  Provider ban-o aur pehle list mein aao!
-                </p>
+        {homepageSettings.showProviders && (
+          <section className="max-w-7xl mx-auto px-4 py-8 border-t border-border">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.1 }}
+            >
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <div>
+                  <h2 className="font-heading font-bold text-2xl text-foreground">
+                    {t("featuredProviders")} ⭐
+                  </h2>
+                  {locationStatus === "granted" && userLocation ? (
+                    <p className="text-xs text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
+                      <LocateFixed size={11} /> GPS चालू है — आस-पास की दुकानें दिख
+                      रही हैं
+                    </p>
+                  ) : locationStatus === "denied" ? (
+                    <p className="text-xs text-red-500 font-medium mt-0.5">
+                      📍 Location Permission नहीं मिली — सभी दुकानें दिख रही हैं
+                    </p>
+                  ) : locationStatus === "requesting" ? (
+                    <p className="text-xs text-amber-500 font-medium mt-0.5">
+                      📍 Location ढूंढ रहे हैं...
+                    </p>
+                  ) : null}
+                </div>
                 <Link
-                  to="/signup"
-                  data-ocid="providers.primary_button"
-                  className="inline-block mt-4 bg-primary text-primary-foreground px-6 py-2 rounded-full text-sm font-semibold hover:opacity-90 transition-opacity"
+                  to="/search"
+                  data-ocid="home.link"
+                  className="text-sm text-primary font-medium hover:underline"
                 >
-                  {t("providerSignup")}
+                  {t("viewAll")} &rarr;
                 </Link>
               </div>
-            )}
-          </motion.div>
-        </section>
 
-        <section className="px-4 mb-8">
-          <div className="bg-emerald-header max-w-7xl mx-auto rounded-2xl">
-            <div className="px-8 py-10 flex flex-col md:flex-row items-center justify-between gap-4">
-              <div>
-                <h3 className="font-heading font-bold text-white text-xl mb-1">
-                  {t("registerBusiness")}
-                </h3>
-                <p className="text-white/75 text-sm">
-                  {lowestPrice != null
-                    ? `Sirf ₹${lowestPrice}/maah mein apna digital shop shuru karein!`
-                    : "Register karo aur hazaro customers tak pahuncho. Bilkul free!"}
-                </p>
+              {/* Radius fallback message */}
+              {locationUsed && radiusUsed > 2 && (
+                <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-sm text-amber-700 font-medium">
+                  आपके पास अभी 2KM में कोई दुकान नहीं है, दायरा बढ़ा रहे हैं... (
+                  {radiusUsed}KM तक की दुकानें दिख रही हैं)
+                </div>
+              )}
+
+              {providersLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {Array.from({ length: 6 }, (_, i) => `skel-${i}`).map(
+                    (sk) => (
+                      <div
+                        key={sk}
+                        className="h-40 bg-gray-100 animate-pulse rounded-2xl"
+                      />
+                    ),
+                  )}
+                </div>
+              ) : featuredProviders.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {featuredProviders.map((p, i) => (
+                    <ProviderCard
+                      key={p.userId.toString()}
+                      profile={p}
+                      index={i + 1}
+                      distanceKm={
+                        "distanceKm" in p
+                          ? (p as { distanceKm: number }).distanceKm
+                          : undefined
+                      }
+                      shopLat={
+                        "lat" in p ? (p as { lat?: number }).lat : undefined
+                      }
+                      shopLng={
+                        "lng" in p ? (p as { lng?: number }).lng : undefined
+                      }
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div
+                  data-ocid="providers.empty_state"
+                  className="text-center py-12 text-muted-foreground"
+                >
+                  <p className="text-4xl mb-3">🏪</p>
+                  <p className="font-medium">Abhi koi provider nahi hai</p>
+                  <p className="text-sm mt-1">
+                    Provider ban-o aur pehle list mein aao!
+                  </p>
+                  <Link
+                    to="/signup"
+                    data-ocid="providers.primary_button"
+                    className="inline-block mt-4 bg-primary text-primary-foreground px-6 py-2 rounded-full text-sm font-semibold hover:opacity-90 transition-opacity"
+                  >
+                    {t("providerSignup")}
+                  </Link>
+                </div>
+              )}
+            </motion.div>
+          </section>
+        )}
+
+        {homepageSettings.showRegisterBanner && (
+          <section className="px-4 mb-8">
+            <div className="bg-emerald-header max-w-7xl mx-auto rounded-2xl">
+              <div className="px-8 py-10 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div>
+                  <h3 className="font-heading font-bold text-white text-xl mb-1">
+                    {t("registerBusiness")}
+                  </h3>
+                  <p className="text-white/75 text-sm">
+                    {lowestPrice != null
+                      ? `Sirf ₹${lowestPrice}/maah mein apna digital shop shuru karein!`
+                      : "Register karo aur hazaro customers tak pahuncho. Bilkul free!"}
+                  </p>
+                </div>
+                <Link
+                  to="/signup"
+                  data-ocid="home.primary_button"
+                  className="bg-white text-emerald-800 font-bold px-8 py-3 rounded-full hover:bg-emerald-50 transition-colors whitespace-nowrap"
+                >
+                  {t("registerNow")}
+                </Link>
               </div>
-              <Link
-                to="/signup"
-                data-ocid="home.primary_button"
-                className="bg-white text-emerald-800 font-bold px-8 py-3 rounded-full hover:bg-emerald-50 transition-colors whitespace-nowrap"
-              >
-                {t("registerNow")}
-              </Link>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* Affiliate Marketing Banner */}
         {affiliateSettings.enabled && (
@@ -891,7 +950,22 @@ export default function HomePage() {
                     {affiliateSettings.description}
                   </p>
                 </div>
-                {affiliateSettings.link && (
+                {affiliateSettings.affiliateLinks.length > 0 ? (
+                  <div className="flex flex-wrap gap-2 mt-2 sm:mt-0">
+                    {affiliateSettings.affiliateLinks.map((link) => (
+                      <a
+                        key={link.id}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-ocid="home.primary_button"
+                        className="flex-shrink-0 bg-white text-emerald-700 font-bold px-4 py-2 rounded-full hover:bg-emerald-50 transition-colors text-sm shadow-md"
+                      >
+                        {link.emoji} {link.title}
+                      </a>
+                    ))}
+                  </div>
+                ) : affiliateSettings.link ? (
                   <a
                     href={affiliateSettings.link}
                     target="_blank"
@@ -899,16 +973,16 @@ export default function HomePage() {
                     data-ocid="home.primary_button"
                     className="flex-shrink-0 bg-white text-emerald-700 font-bold px-7 py-2.5 rounded-full hover:bg-emerald-50 transition-colors text-sm shadow-md"
                   >
-                    Join Now →
+                    Join Now &rarr;
                   </a>
-                )}
+                ) : null}
               </div>
             </motion.div>
           </section>
         )}
 
         {/* Social Media Icons */}
-        {enabledSocialPlatforms.length > 0 && (
+        {allEnabledSocialPlatforms.length > 0 && (
           <section className="px-4 pb-8 max-w-7xl mx-auto">
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -920,7 +994,7 @@ export default function HomePage() {
                 Hamare Social Media par Follow Karein
               </p>
               <div className="flex items-center justify-center gap-4 flex-wrap">
-                {enabledSocialPlatforms.map((platform) => (
+                {allEnabledSocialPlatforms.map((platform) => (
                   <a
                     key={platform.key}
                     href={platform.url || "#"}

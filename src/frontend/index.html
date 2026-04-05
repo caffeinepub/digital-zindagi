@@ -2,7 +2,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#0F5A48" />
+    <meta name="theme-color" content="#064420" />
     <meta name="description" content="Digital Zindagi - Apka Local Digital Marketplace" />
     <meta name="application-name" content="Digital Zindagi" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -34,15 +34,38 @@
     <link rel="shortcut icon" href="/logo.png" />
     <title>Digital Zindagi</title>
     <style>
-      /* Header logo: 5px padding, object-fit contain, never cut off */
+      /* Splash screen background */
+      html, body {
+        background-color: #064420;
+      }
+      /* Header logo */
+      .header-logo-wrap {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #ffffff;
+        border-radius: 50%;
+        padding: 3px;
+        width: 46px;
+        height: 46px;
+        flex-shrink: 0;
+        box-shadow: 0 0 0 2px #d4af37;
+      }
       .header-logo {
-        padding: 5px;
+        width: 34px;
+        height: 34px;
         object-fit: contain;
+        border-radius: 50%;
+        display: block;
       }
       /* Prevent horizontal scroll globally */
       html, body, #root {
         overflow-x: hidden;
         max-width: 100vw;
+      }
+      /* Hide any Caffeine branding if it ever appears */
+      [data-caffeine], .caffeine-brand, .powered-by-caffeine {
+        display: none !important;
       }
     </style>
   </head>

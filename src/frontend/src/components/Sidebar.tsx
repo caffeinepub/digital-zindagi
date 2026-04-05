@@ -134,12 +134,32 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             exit={{ x: "-100%" }}
             transition={{ type: "spring", stiffness: 350, damping: 35 }}
             className="fixed left-0 top-0 bottom-0 z-50 w-72 bg-emerald-header flex flex-col"
+            style={{ height: "100dvh", maxHeight: "100dvh" }}
             data-ocid="sidebar.panel"
           >
-            <div className="flex items-center justify-between p-5 border-b border-white/10">
-              <span className="font-heading font-bold text-white text-xl">
-                Digital Zindagi
-              </span>
+            {/* Header */}
+            <div
+              className="flex items-center justify-between p-5 border-b border-white/10"
+              style={{ flexShrink: 0 }}
+            >
+              <div className="flex items-center gap-2">
+                <img
+                  src="/assets/generated/dz-logo-premium.dim_512x512.png"
+                  alt="Digital Zindagi"
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    objectFit: "contain",
+                    borderRadius: "50%",
+                  }}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = "/logo.png";
+                  }}
+                />
+                <span className="font-heading font-bold text-white text-lg">
+                  Digital Zindagi
+                </span>
+              </div>
               <button
                 type="button"
                 data-ocid="sidebar.close_button"
@@ -151,7 +171,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             </div>
 
             {user && (
-              <div className="px-5 py-4 border-b border-white/10">
+              <div
+                className="px-5 py-4 border-b border-white/10"
+                style={{ flexShrink: 0 }}
+              >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold">
                     {user.name.charAt(0).toUpperCase()}
@@ -168,8 +191,15 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               </div>
             )}
 
+            {/* Scrollable nav area */}
             <nav
-              className="flex-1 p-4 space-y-1 overflow-y-auto"
+              className="p-4 space-y-1"
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                overflowX: "hidden",
+                minHeight: 0,
+              }}
               aria-label="Sidebar navigation"
             >
               {navLinks.map((link) => (
@@ -210,7 +240,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             </nav>
 
             {/* Language switcher at bottom */}
-            <div className="p-4 border-t border-white/10">
+            <div
+              className="p-4 border-t border-white/10"
+              style={{ flexShrink: 0 }}
+            >
               <div className="flex items-center gap-2 mb-2">
                 <Globe size={14} className="text-white/60" />
                 <span className="text-white/60 text-xs font-medium">
@@ -236,7 +269,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               </div>
             </div>
 
-            <div className="px-5 pb-4 text-center">
+            <div className="px-5 pb-4 text-center" style={{ flexShrink: 0 }}>
               <p className="text-white/40 text-xs">
                 Digital Zindagi &copy; {new Date().getFullYear()}
               </p>

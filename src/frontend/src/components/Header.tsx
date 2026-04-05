@@ -1,14 +1,78 @@
-import { Globe, Menu } from "lucide-react";
-import { useRef, useState } from "react";
+import { Download, Globe, Menu } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLanguage } from "../contexts/LanguageContext";
 import { useNavigate } from "../lib/router";
 import Sidebar from "./Sidebar";
 
-// Updated admin credentials (V162)
-const ADMIN_EMAIL = "sushilkumar12022@gmail.com";
+// Admin credentials — both emails supported
+const ADMIN_EMAILS = [
+  "sushhilkumar651@gmail.com",
+  "sushilkumar12022@gmail.com",
+];
 const ADMIN_PASSWORD = "123456";
 const ADMIN_PIN = "12345";
+
+function LogoImage() {
+  const [src, setSrc] = useState(
+    () =>
+      localStorage.getItem("dz_app_logo") ||
+      "/assets/generated/dz-logo-premium.dim_512x512.png",
+  );
+  const [failed, setFailed] = useState(false);
+
+  // Listen for admin logo changes
+  useEffect(() => {
+    const handler = () => {
+      const customLogo = localStorage.getItem("dz_app_logo");
+      if (customLogo) setSrc(customLogo);
+    };
+    window.addEventListener("dz_settings_changed", handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener("dz_settings_changed", handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, []);
+
+  if (failed) {
+    return (
+      <div
+        style={{
+          width: "40px",
+          height: "40px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: "24px",
+        }}
+      >
+        🌿
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt="Digital Zindagi Logo"
+      style={{
+        width: "40px",
+        height: "40px",
+        objectFit: "cover",
+        display: "block",
+        borderRadius: "50%",
+        filter: "drop-shadow(0 0 4px rgba(212,175,55,0.5))",
+      }}
+      onError={() => {
+        if (src !== "/logo.png") {
+          setSrc("/logo.png");
+        } else {
+          setFailed(true);
+        }
+      }}
+    />
+  );
+}
 
 export default function Header() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -16,6 +80,50 @@ export default function Header() {
   const { lang, setLang, t } = useLanguage();
   const langRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+
+  // PWA Install
+  const [installPrompt, setInstallPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+
+  useEffect(() => {
+    // Check if already installed (running in standalone)
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as any).standalone === true;
+    setIsInstalled(isStandalone);
+
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e as BeforeInstallPromptEvent);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+
+    const installedHandler = () => setIsInstalled(true);
+    window.addEventListener("appinstalled", installedHandler);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("appinstalled", installedHandler);
+    };
+  }, []);
+
+  async function handleInstall() {
+    if (installPrompt) {
+      installPrompt.prompt();
+      const { outcome } = await installPrompt.userChoice;
+      if (outcome === "accepted") {
+        toast.success("App install ho gaya!");
+        setInstallPrompt(null);
+        setIsInstalled(true);
+      }
+    } else {
+      toast.info(
+        'Chrome menu mein "Add to Home Screen" dabao app install karne ke liye',
+        { duration: 4000 },
+      );
+    }
+  }
 
   // 5-tap secret admin entry
   const tapCountRef = useRef(0);
@@ -42,16 +150,17 @@ export default function Header() {
   }
 
   function handleAdminLogin() {
-    const storedEmail = localStorage.getItem("dz_admin_email") ?? ADMIN_EMAIL;
+    const storedEmail = localStorage.getItem("dz_admin_email");
     const storedPassword =
       localStorage.getItem("dz_admin_password") ?? ADMIN_PASSWORD;
     const storedPin = localStorage.getItem("dz_admin_pin") ?? ADMIN_PIN;
 
-    // Accept email+PIN OR email+password
-    const emailOk =
-      popupEmail.trim().toLowerCase() === storedEmail.toLowerCase();
+    const enteredEmail = popupEmail.trim().toLowerCase();
+    const validEmails = [...ADMIN_EMAILS];
+    if (storedEmail) validEmails.push(storedEmail.toLowerCase());
+
+    const emailOk = validEmails.includes(enteredEmail);
     const pinOk = popupPin.trim() === storedPin;
-    // also allow password in PIN field for flexibility
     const passwordOk = popupPin.trim() === storedPassword;
 
     if (emailOk && (pinOk || passwordOk)) {
@@ -78,7 +187,7 @@ export default function Header() {
   return (
     <>
       <header className="sticky top-0 z-40 bg-emerald-header shadow-emerald">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center gap-3">
+        <div className="max-w-7xl mx-auto px-3 h-16 flex items-center gap-2">
           {/* Left: Hamburger Menu */}
           <button
             type="button"
@@ -95,28 +204,67 @@ export default function Header() {
             type="button"
             data-ocid="header.logo_tap"
             onClick={handleLogoTap}
-            className="font-heading font-bold text-white text-lg whitespace-nowrap flex-1 flex items-center gap-2 min-w-0 bg-transparent border-0 cursor-pointer p-0 text-left"
+            className="font-heading font-bold text-white text-base whitespace-nowrap flex-1 flex items-center gap-2 min-w-0 bg-transparent border-0 cursor-pointer p-0 text-left"
             aria-label="Digital Zindagi"
           >
-            <img
-              src="/logo.png"
-              alt="Digital Zindagi Logo"
-              className="header-logo w-8 h-8 rounded-md flex-shrink-0"
-              style={{ padding: "5px", objectFit: "contain" }}
-              onError={(e) => {
-                const img = e.currentTarget as HTMLImageElement;
-                img.src = "/assets/generated/dz-logo-192.dim_192x192.png";
-                img.onerror = () => {
-                  img.src =
-                    "/assets/generated/dz-logo-transparent.dim_512x512.png";
-                  img.onerror = () => {
-                    img.style.display = "none";
-                  };
-                };
+            {/* Logo */}
+            <div
+              className="header-logo-wrap flex-shrink-0"
+              style={{
+                borderRadius: "50%",
+                width: "40px",
+                height: "40px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+                border: "1.5px solid rgba(212,175,55,0.6)",
+                boxShadow: "0 0 8px rgba(212,175,55,0.3)",
+                overflow: "hidden",
               }}
-            />
-            <span className="truncate">Digital Zindagi</span>
+            >
+              <LogoImage />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span
+                className="text-white font-bold leading-tight truncate"
+                style={{ fontSize: "15px" }}
+              >
+                Digital Zindagi
+              </span>
+              <span
+                style={{
+                  color: "rgba(212,175,55,0.85)",
+                  fontSize: "10px",
+                  lineHeight: "1",
+                  fontWeight: 400,
+                }}
+              >
+                डिजिटल जिंदगी से जुड़ो
+              </span>
+            </div>
           </button>
+
+          {/* Install Button — only show in browser (not when already installed) */}
+          {!isInstalled && (
+            <button
+              type="button"
+              data-ocid="header.install_button"
+              onClick={handleInstall}
+              className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
+              style={{
+                background: "rgba(212,175,55,0.9)",
+                color: "#064420",
+                border: "1px solid rgba(212,175,55,0.3)",
+                backdropFilter: "blur(4px)",
+                whiteSpace: "nowrap",
+              }}
+              title="App Install Karen"
+            >
+              <Download size={12} />
+              <span>Install</span>
+            </button>
+          )}
 
           {/* Language Switcher */}
           <div ref={langRef} className="relative flex-shrink-0">
@@ -129,9 +277,6 @@ export default function Header() {
               aria-expanded={langDropOpen}
             >
               <Globe size={18} />
-              <span className="text-xs font-medium hidden sm:inline">
-                {lang === "hinglish" ? "HG" : lang === "hindi" ? "HI" : "EN"}
-              </span>
             </button>
             {langDropOpen && (
               <div
@@ -160,7 +305,6 @@ export default function Header() {
               </div>
             )}
           </div>
-          {/* Settings icon removed — use 5-tap on logo for admin access */}
         </div>
       </header>
 
@@ -180,15 +324,36 @@ export default function Header() {
         >
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-80 max-w-[90vw]">
             <div className="flex flex-col items-center mb-4">
-              <img
-                src="/logo.png"
-                alt="Digital Zindagi"
-                className="w-12 h-12 rounded-xl mb-2"
-                style={{ padding: "4px", objectFit: "contain" }}
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.display = "none";
+              <div
+                style={{
+                  background: "linear-gradient(135deg, #064420, #0a6e35)",
+                  borderRadius: "50%",
+                  padding: "3px",
+                  width: "70px",
+                  height: "70px",
+                  boxShadow:
+                    "0 0 0 2.5px #d4af37, 0 4px 20px rgba(6,68,32,0.4)",
+                  marginBottom: "10px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  overflow: "hidden",
                 }}
-              />
+              >
+                <img
+                  src="/assets/generated/dz-logo-premium.dim_512x512.png"
+                  alt="Digital Zindagi"
+                  style={{
+                    width: "64px",
+                    height: "64px",
+                    objectFit: "cover",
+                    borderRadius: "50%",
+                  }}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = "/logo.png";
+                  }}
+                />
+              </div>
               <h2 className="text-lg font-bold text-gray-800">एडमिन लॉगिन</h2>
               <p className="text-xs text-gray-500 mt-1">
                 Digital Zindagi Admin
@@ -218,7 +383,7 @@ export default function Header() {
                   htmlFor="admin-popup-pin"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  PIN (5 अंक)
+                  PIN
                 </label>
                 <input
                   id="admin-popup-pin"
@@ -256,4 +421,12 @@ export default function Header() {
       )}
     </>
   );
+}
+
+// TypeScript declaration for PWA install prompt
+declare global {
+  interface BeforeInstallPromptEvent extends Event {
+    prompt(): Promise<void>;
+    userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+  }
 }

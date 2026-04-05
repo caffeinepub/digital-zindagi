@@ -121,6 +121,11 @@ export default function SignupPage() {
   const navigate = useNavigate();
   const categories = getCategories();
 
+  // Welcome message from admin settings
+  const welcomeMessage =
+    localStorage.getItem("dz_welcome_message") ??
+    "Digital Zindagi family mein shamil ho";
+
   // Admin QR toggle
   const showRegistrationQR = (() => {
     try {
@@ -243,9 +248,7 @@ export default function SignupPage() {
           <h1 className="font-heading font-bold text-white text-3xl">
             Account Banao
           </h1>
-          <p className="text-white/70 text-sm mt-1">
-            Digital Zindagi family mein shamil ho
-          </p>
+          <p className="text-white/70 text-sm mt-1">{welcomeMessage}</p>
         </div>
 
         <form onSubmit={handleCustomerSubmit} className="px-8 py-7 space-y-5">

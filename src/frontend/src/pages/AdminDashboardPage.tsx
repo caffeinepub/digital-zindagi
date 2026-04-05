@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
+  Calculator,
   CheckCircle,
   CheckSquare,
   DollarSign,
@@ -11,6 +12,7 @@ import {
   Loader2,
   LogOut,
   MessageCircle,
+  MessageSquare,
   Palette,
   Pencil,
   Plus,
@@ -51,6 +53,7 @@ import {
   useUsersByRole,
 } from "../hooks/useQueries";
 import { useNavigate } from "../lib/router";
+import { broadcastSettingsChange } from "../utils/settingsSync";
 
 type AdminSection =
   | "founder"
@@ -64,7 +67,11 @@ type AdminSection =
   | "pricing"
   | "staff"
   | "ads"
-  | "ebookManager";
+  | "ebookManager"
+  | "appSettings"
+  | "scrapRates"
+  | "homepageControls"
+  | "announcements";
 
 const DEFAULT_EMERALD = "#059669";
 
@@ -1236,13 +1243,79 @@ function FounderSettingsSection() {
       return "";
     }
   });
+  const [appLogoUrl, setAppLogoUrl] = useState<string>(
+    () => localStorage.getItem("dz_app_logo") ?? "",
+  );
+  const [splashLogoUrl, setSplashLogoUrl] = useState<string>(
+    () => localStorage.getItem("dz_splash_logo") ?? "",
+  );
   const [showSaved, setShowSaved] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const splashLogoInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Sirf image file upload karein (JPG/PNG)");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Photo 2MB se chhota hona chahiye");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setFounderPhoto(ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Sirf image file upload karein");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Logo 2MB se chhota hona chahiye");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setAppLogoUrl(ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSplashLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Sirf image file upload karein");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Logo 2MB se chhota hona chahiye");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setSplashLogoUrl(ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSave = () => {
     localStorage.setItem(
       "dz_founder",
       JSON.stringify({ name: founderName, photo: founderPhoto }),
     );
+    if (appLogoUrl) localStorage.setItem("dz_app_logo", appLogoUrl);
+    if (splashLogoUrl) localStorage.setItem("dz_splash_logo", splashLogoUrl);
+    broadcastSettingsChange();
     setShowSaved(true);
     toast.success("Founder settings save ho gayi!");
     setTimeout(() => setShowSaved(false), 3000);
@@ -1251,6 +1324,8 @@ function FounderSettingsSection() {
   return (
     <div className="space-y-6">
       <SaveConfirmation show={showSaved} />
+
+      {/* Founder Info */}
       <div className="bg-white rounded-2xl border border-border shadow-card p-6 space-y-4">
         <h3 className="font-heading font-semibold text-foreground flex items-center gap-2">
           <Star size={18} className="text-primary" /> Founder Branding
@@ -1277,20 +1352,46 @@ function FounderSettingsSection() {
         </div>
         <div>
           <label
-            htmlFor="fs-photo"
+            htmlFor="fs-photo-upload"
             className="block text-sm font-medium text-foreground mb-1.5"
           >
-            Founder Photo URL
+            Founder Photo
           </label>
-          <input
-            id="fs-photo"
-            data-ocid="admin.input"
-            type="text"
-            value={founderPhoto}
-            onChange={(e) => setFounderPhoto(e.target.value)}
-            placeholder="https://... (photo URL)"
-            className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-          />
+          <div className="flex gap-3 items-center">
+            {founderPhoto && (
+              <img
+                src={founderPhoto}
+                alt="Founder"
+                className="w-14 h-14 rounded-full object-cover border-2 border-primary flex-shrink-0"
+              />
+            )}
+            <div className="flex-1 space-y-2">
+              <button
+                type="button"
+                data-ocid="admin.upload_button"
+                onClick={() => photoInputRef.current?.click()}
+                className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-primary/40 rounded-xl py-3 text-sm font-medium text-primary hover:bg-primary/5 transition-colors"
+              >
+                <Image size={16} /> Gallery se Photo Upload Karen
+              </button>
+              <input
+                id="fs-photo-upload"
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoUpload}
+              />
+              <input
+                data-ocid="admin.input"
+                type="url"
+                value={founderPhoto.startsWith("data:") ? "" : founderPhoto}
+                onChange={(e) => setFounderPhoto(e.target.value)}
+                placeholder="ya URL paste karein..."
+                className="w-full border border-border rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
         </div>
         {(founderName || founderPhoto) && (
           <div className="bg-muted rounded-xl p-4 flex items-center gap-3">
@@ -1312,16 +1413,127 @@ function FounderSettingsSection() {
             </div>
           </div>
         )}
-        <button
-          type="button"
-          data-ocid="admin.save_button"
-          onClick={handleSave}
-          className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold px-6 py-2.5 rounded-xl transition-colors"
-        >
-          <CheckCircle size={16} />
-          Founder Settings Save Karein
-        </button>
       </div>
+
+      {/* App Logo (Header) */}
+      <div className="bg-white rounded-2xl border border-border shadow-card p-6 space-y-4">
+        <h3 className="font-heading font-semibold text-foreground flex items-center gap-2">
+          <Palette size={18} className="text-primary" /> Header Logo Change
+          Karen
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          App ke upar header mein dikhne wala logo yahan se change karein.
+        </p>
+        <div className="flex gap-3 items-center">
+          <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-primary flex-shrink-0 bg-emerald-900 flex items-center justify-center">
+            <img
+              src={
+                appLogoUrl ||
+                "/assets/generated/dz-logo-premium.dim_512x512.png"
+              }
+              alt="Logo Preview"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src = "/logo.png";
+              }}
+            />
+          </div>
+          <div className="flex-1 space-y-2">
+            <button
+              type="button"
+              data-ocid="admin.upload_button"
+              onClick={() => logoInputRef.current?.click()}
+              className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-primary/40 rounded-xl py-3 text-sm font-medium text-primary hover:bg-primary/5 transition-colors"
+            >
+              <Image size={16} /> Gallery se Header Logo Upload Karen
+            </button>
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleLogoUpload}
+            />
+          </div>
+        </div>
+        {appLogoUrl && (
+          <button
+            type="button"
+            onClick={() => {
+              setAppLogoUrl("");
+              localStorage.removeItem("dz_app_logo");
+            }}
+            className="text-xs text-red-500 hover:underline"
+          >
+            Default logo wapas lagaen
+          </button>
+        )}
+      </div>
+
+      {/* Splash Screen Logo */}
+      <div className="bg-white rounded-2xl border border-border shadow-card p-6 space-y-4">
+        <h3 className="font-heading font-semibold text-foreground flex items-center gap-2">
+          <Star size={18} className="text-amber-500" /> Splash/Open Screen Logo
+          Change Karen
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          App kholne par jo logo dikhta hai woh yahan se change karein.
+        </p>
+        <div className="flex gap-3 items-center">
+          <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-amber-400 flex-shrink-0 bg-emerald-900 flex items-center justify-center">
+            <img
+              src={
+                splashLogoUrl ||
+                "/assets/generated/dz-logo-premium.dim_512x512.png"
+              }
+              alt="Splash Logo Preview"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src = "/logo.png";
+              }}
+            />
+          </div>
+          <div className="flex-1 space-y-2">
+            <button
+              type="button"
+              data-ocid="admin.upload_button"
+              onClick={() => splashLogoInputRef.current?.click()}
+              className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-amber-400/60 rounded-xl py-3 text-sm font-medium text-amber-600 hover:bg-amber-50 transition-colors"
+            >
+              <Image size={16} /> Gallery se Splash Logo Upload Karen
+            </button>
+            <input
+              ref={splashLogoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleSplashLogoUpload}
+            />
+          </div>
+        </div>
+        {splashLogoUrl && (
+          <button
+            type="button"
+            onClick={() => {
+              setSplashLogoUrl("");
+              localStorage.removeItem("dz_splash_logo");
+            }}
+            className="text-xs text-red-500 hover:underline"
+          >
+            Default logo wapas lagaen
+          </button>
+        )}
+      </div>
+
+      <button
+        type="button"
+        data-ocid="admin.save_button"
+        onClick={handleSave}
+        className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold px-6 py-2.5 rounded-xl transition-colors"
+      >
+        <CheckCircle size={16} />
+        Founder Settings Save Karein
+      </button>
     </div>
   );
 }
@@ -3225,7 +3437,7 @@ function AdsManager() {
 
 // ---- Social Media Section ----
 function SocialMediaSection() {
-  const [settings, setSettings] = useState(() => {
+  const [settings, setSettings] = useState<Record<string, unknown>>(() => {
     try {
       return JSON.parse(localStorage.getItem("dz_social_settings") ?? "{}");
     } catch {
@@ -3233,30 +3445,64 @@ function SocialMediaSection() {
     }
   });
   const [saved, setSaved] = useState(false);
+  const [newPlatformName, setNewPlatformName] = useState("");
+  const [newPlatformEmoji, setNewPlatformEmoji] = useState("🔗");
 
-  const platforms = [
-    { key: "facebook", label: "Facebook", icon: <Facebook size={18} /> },
-    { key: "instagram", label: "Instagram", icon: <Instagram size={18} /> },
-    { key: "whatsapp", label: "WhatsApp", icon: <Share2 size={18} /> },
-    { key: "youtube", label: "YouTube", icon: <Youtube size={18} /> },
+  const DEFAULT_PLATFORMS = [
+    { key: "facebook", label: "Facebook", icon: "📘" },
+    { key: "instagram", label: "Instagram", icon: "📸" },
+    { key: "whatsapp", label: "WhatsApp", icon: "💬" },
+    { key: "youtube", label: "YouTube", icon: "▶️" },
   ];
 
+  const customPlatforms: { key: string; label: string; icon: string }[] =
+    (settings._customPlatforms as {
+      key: string;
+      label: string;
+      icon: string;
+    }[]) ?? [];
+
+  const allPlatforms = [...DEFAULT_PLATFORMS, ...customPlatforms];
+
   const handleToggle = (key: string) => {
-    setSettings((prev: Record<string, unknown>) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
+    setSettings((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const handleUrl = (key: string, val: string) => {
-    setSettings((prev: Record<string, unknown>) => ({
-      ...prev,
-      [`${key}Url`]: val,
-    }));
+    setSettings((prev) => ({ ...prev, [`${key}Url`]: val }));
+  };
+
+  const handleAddCustom = () => {
+    if (!newPlatformName.trim()) {
+      toast.error("Platform ka naam likhein");
+      return;
+    }
+    const key = `custom_${Date.now()}`;
+    const newPlatform = {
+      key,
+      label: newPlatformName.trim(),
+      icon: newPlatformEmoji,
+    };
+    const updated = [...customPlatforms, newPlatform];
+    setSettings((prev) => ({ ...prev, _customPlatforms: updated }));
+    setNewPlatformName("");
+    setNewPlatformEmoji("🔗");
+    toast.success(`${newPlatformName} add ho gaya!`);
+  };
+
+  const handleRemoveCustom = (key: string) => {
+    const updated = customPlatforms.filter((p) => p.key !== key);
+    setSettings((prev) => {
+      const next = { ...prev, _customPlatforms: updated };
+      delete next[key];
+      delete next[`${key}Url`];
+      return next;
+    });
   };
 
   const handleSave = () => {
     localStorage.setItem("dz_social_settings", JSON.stringify(settings));
+    broadcastSettingsChange();
     setSaved(true);
     toast.success("Social Media settings save ho gayi!");
     setTimeout(() => setSaved(false), 2000);
@@ -3271,24 +3517,29 @@ function SocialMediaSection() {
         <p className="text-sm text-muted-foreground">
           Jab aap kisi platform ko ON karenge, woh icon homepage par dikhega.
         </p>
-        {platforms.map((p) => (
+        {allPlatforms.map((p) => (
           <div
             key={p.key}
             className="border border-border rounded-xl p-4 space-y-3"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 font-semibold text-sm">
-                {p.icon} {p.label}
+                <span>{p.icon}</span> {p.label}
+                {customPlatforms.some((c) => c.key === p.key) && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveCustom(p.key)}
+                    className="ml-2 text-red-400 hover:text-red-600 text-xs"
+                  >
+                    ✕ हटाएं
+                  </button>
+                )}
               </div>
               <button
                 type="button"
                 data-ocid="admin.toggle"
                 onClick={() => handleToggle(p.key)}
-                className={`flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg transition-all ${
-                  settings[p.key]
-                    ? "bg-green-100 text-green-700 hover:bg-green-200"
-                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                }`}
+                className={`flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg transition-all ${settings[p.key] ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
               >
                 {settings[p.key] ? (
                   <ToggleRight size={18} />
@@ -3298,7 +3549,7 @@ function SocialMediaSection() {
                 {settings[p.key] ? "ON" : "OFF"}
               </button>
             </div>
-            {settings[p.key] && (
+            {!!settings[p.key] && (
               <input
                 data-ocid="admin.input"
                 type="url"
@@ -3310,15 +3561,46 @@ function SocialMediaSection() {
             )}
           </div>
         ))}
+
+        {/* Add New Platform */}
+        <div className="border-2 border-dashed border-primary/30 rounded-xl p-4 space-y-3">
+          <p className="text-sm font-semibold text-foreground">
+            + Naya Platform Add Karen
+          </p>
+          <div className="flex gap-2">
+            <input
+              data-ocid="admin.input"
+              type="text"
+              placeholder="Platform naam (e.g. Telegram)"
+              value={newPlatformName}
+              onChange={(e) => setNewPlatformName(e.target.value)}
+              className="flex-1 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+            <input
+              data-ocid="admin.input"
+              type="text"
+              placeholder="Emoji"
+              value={newPlatformEmoji}
+              onChange={(e) => setNewPlatformEmoji(e.target.value)}
+              className="w-16 border border-border rounded-xl px-2 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring text-center"
+              maxLength={4}
+            />
+          </div>
+          <button
+            type="button"
+            data-ocid="admin.button"
+            onClick={handleAddCustom}
+            className="w-full flex items-center justify-center gap-2 bg-primary/10 text-primary font-semibold py-2.5 rounded-xl hover:bg-primary/20 transition-colors text-sm"
+          >
+            <Plus size={16} /> Platform Add Karen
+          </button>
+        </div>
+
         <button
           type="button"
           data-ocid="admin.primary_button"
           onClick={handleSave}
-          className={`w-full py-3 rounded-xl font-bold text-sm transition-colors ${
-            saved
-              ? "bg-green-500 text-white"
-              : "bg-primary text-primary-foreground hover:opacity-90"
-          }`}
+          className={`w-full py-3 rounded-xl font-bold text-sm transition-colors ${saved ? "bg-green-500 text-white" : "bg-primary text-primary-foreground hover:opacity-90"}`}
         >
           {saved ? "✓ Saved!" : "Save Social Media Settings"}
         </button>
@@ -3328,8 +3610,21 @@ function SocialMediaSection() {
 }
 
 // ---- Affiliate Marketing Section ----
+interface AffiliateLink {
+  id: string;
+  title: string;
+  url: string;
+  emoji: string;
+}
+
 function AffiliateMarketingSection() {
-  const [settings, setSettings] = useState(() => {
+  const [settings, setSettings] = useState<{
+    enabled: boolean;
+    title: string;
+    description: string;
+    link: string;
+    affiliateLinks: AffiliateLink[];
+  }>(() => {
     try {
       const raw = localStorage.getItem("dz_affiliate_settings");
       if (!raw)
@@ -3338,24 +3633,60 @@ function AffiliateMarketingSection() {
           title: "Affiliate Marketing",
           description: "Paisa kamao Digital Zindagi se!",
           link: "",
+          affiliateLinks: [],
         };
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (!parsed.affiliateLinks) parsed.affiliateLinks = [];
+      return parsed;
     } catch {
       return {
         enabled: false,
         title: "Affiliate Marketing",
         description: "Paisa kamao Digital Zindagi se!",
         link: "",
+        affiliateLinks: [],
       };
     }
   });
   const [saved, setSaved] = useState(false);
+  const [newLinkTitle, setNewLinkTitle] = useState("");
+  const [newLinkUrl, setNewLinkUrl] = useState("");
+  const [newLinkEmoji, setNewLinkEmoji] = useState("🛒");
 
   const handleSave = () => {
     localStorage.setItem("dz_affiliate_settings", JSON.stringify(settings));
+    broadcastSettingsChange();
     setSaved(true);
     toast.success("Affiliate Marketing settings save ho gayi!");
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleAddLink = () => {
+    if (!newLinkTitle.trim() || !newLinkUrl.trim()) {
+      toast.error("Title aur URL dono likhein");
+      return;
+    }
+    const newLink: AffiliateLink = {
+      id: Date.now().toString(),
+      title: newLinkTitle.trim(),
+      url: newLinkUrl.trim(),
+      emoji: newLinkEmoji,
+    };
+    setSettings((prev) => ({
+      ...prev,
+      affiliateLinks: [...prev.affiliateLinks, newLink],
+    }));
+    setNewLinkTitle("");
+    setNewLinkUrl("");
+    setNewLinkEmoji("🛒");
+    toast.success("Link add ho gaya!");
+  };
+
+  const handleRemoveLink = (id: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      affiliateLinks: prev.affiliateLinks.filter((l) => l.id !== id),
+    }));
   };
 
   return (
@@ -3369,16 +3700,9 @@ function AffiliateMarketingSection() {
             type="button"
             data-ocid="admin.toggle"
             onClick={() =>
-              setSettings((prev: typeof settings) => ({
-                ...prev,
-                enabled: !prev.enabled,
-              }))
+              setSettings((prev) => ({ ...prev, enabled: !prev.enabled }))
             }
-            className={`flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg transition-all ${
-              settings.enabled
-                ? "bg-green-100 text-green-700 hover:bg-green-200"
-                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-            }`}
+            className={`flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg transition-all ${settings.enabled ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
           >
             {settings.enabled ? (
               <ToggleRight size={18} />
@@ -3390,7 +3714,7 @@ function AffiliateMarketingSection() {
         </div>
         <p className="text-sm text-muted-foreground">
           ON karne par homepage par ek promotional banner dikhega jahan users
-          affiliate link join kar sakte hain.
+          affiliate links dekh sakte hain.
         </p>
         <div className="space-y-3">
           <div>
@@ -3407,10 +3731,7 @@ function AffiliateMarketingSection() {
               placeholder="Affiliate Marketing"
               value={settings.title}
               onChange={(e) =>
-                setSettings((prev: typeof settings) => ({
-                  ...prev,
-                  title: e.target.value,
-                }))
+                setSettings((prev) => ({ ...prev, title: e.target.value }))
               }
               className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
             />
@@ -3428,7 +3749,7 @@ function AffiliateMarketingSection() {
               placeholder="Paisa kamao Digital Zindagi se!"
               value={settings.description}
               onChange={(e) =>
-                setSettings((prev: typeof settings) => ({
+                setSettings((prev) => ({
                   ...prev,
                   description: e.target.value,
                 }))
@@ -3437,30 +3758,92 @@ function AffiliateMarketingSection() {
               className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring resize-none"
             />
           </div>
-          <div>
-            <label
-              htmlFor="aff-link"
-              className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 block"
-            >
-              Join Link (URL)
-            </label>
+        </div>
+      </div>
+
+      {/* Multiple Affiliate Links */}
+      <div className="bg-white rounded-2xl border border-border shadow-card p-6 space-y-4">
+        <h3 className="font-heading font-semibold text-foreground">
+          🛒 Affiliate Links (Flipkart, Amazon etc.)
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Apne affiliate links yahan add karein — homepage par buttons ban
+          jaayenge.
+        </p>
+
+        {settings.affiliateLinks.length > 0 && (
+          <div className="space-y-2">
+            {settings.affiliateLinks.map((link) => (
+              <div
+                key={link.id}
+                className="flex items-center justify-between bg-muted/40 rounded-xl px-4 py-3 gap-2"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span>{link.emoji}</span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">
+                      {link.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {link.url}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveLink(link.id)}
+                  className="flex-shrink-0 text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1 hover:bg-red-50 rounded-lg transition-colors"
+                >
+                  ✕ हटाएं
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add new link */}
+        <div className="border-2 border-dashed border-primary/30 rounded-xl p-4 space-y-3">
+          <p className="text-sm font-semibold text-foreground">
+            + Naya Link Add Karen
+          </p>
+          <div className="flex gap-2">
             <input
-              id="aff-link"
               data-ocid="admin.input"
-              type="url"
-              placeholder="https://..."
-              value={settings.link}
-              onChange={(e) =>
-                setSettings((prev: typeof settings) => ({
-                  ...prev,
-                  link: e.target.value,
-                }))
-              }
-              className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+              type="text"
+              placeholder="Title (e.g. Flipkart)"
+              value={newLinkTitle}
+              onChange={(e) => setNewLinkTitle(e.target.value)}
+              className="flex-1 border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+            <input
+              data-ocid="admin.input"
+              type="text"
+              placeholder="Emoji"
+              value={newLinkEmoji}
+              onChange={(e) => setNewLinkEmoji(e.target.value)}
+              className="w-16 border border-border rounded-xl px-2 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring text-center"
+              maxLength={4}
             />
           </div>
+          <input
+            data-ocid="admin.input"
+            type="url"
+            placeholder="https://flipkart.com/affiliate/..."
+            value={newLinkUrl}
+            onChange={(e) => setNewLinkUrl(e.target.value)}
+            className="w-full border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+          />
+          <button
+            type="button"
+            data-ocid="admin.button"
+            onClick={handleAddLink}
+            className="w-full flex items-center justify-center gap-2 bg-primary/10 text-primary font-semibold py-2.5 rounded-xl hover:bg-primary/20 transition-colors text-sm"
+          >
+            <Plus size={16} /> Link Add Karen
+          </button>
         </div>
-        {settings.enabled && (
+
+        {settings.enabled && settings.affiliateLinks.length > 0 && (
           <div className="bg-gradient-to-r from-emerald-600 to-green-500 rounded-2xl p-4 text-white">
             <p className="text-xs font-semibold uppercase tracking-wide opacity-80 mb-1">
               Preview (Homepage par aise dikhega)
@@ -3468,26 +3851,25 @@ function AffiliateMarketingSection() {
             <p className="font-bold text-lg">
               {settings.title || "Affiliate Marketing"}
             </p>
-            <p className="text-sm opacity-90 mt-1">
-              {settings.description || "Paisa kamao Digital Zindagi se!"}
-            </p>
-            <button
-              type="button"
-              className="mt-3 bg-white text-emerald-700 text-xs font-bold px-4 py-1.5 rounded-xl"
-            >
-              Join Now →
-            </button>
+            <p className="text-sm opacity-90 mt-1">{settings.description}</p>
+            <div className="flex flex-wrap gap-2 mt-3">
+              {settings.affiliateLinks.slice(0, 4).map((link) => (
+                <span
+                  key={link.id}
+                  className="bg-white text-emerald-700 text-xs font-bold px-3 py-1.5 rounded-xl"
+                >
+                  {link.emoji} {link.title}
+                </span>
+              ))}
+            </div>
           </div>
         )}
+
         <button
           type="button"
           data-ocid="admin.primary_button"
           onClick={handleSave}
-          className={`w-full py-3 rounded-xl font-bold text-sm transition-colors ${
-            saved
-              ? "bg-green-500 text-white"
-              : "bg-primary text-primary-foreground hover:opacity-90"
-          }`}
+          className={`w-full py-3 rounded-xl font-bold text-sm transition-colors ${saved ? "bg-green-500 text-white" : "bg-primary text-primary-foreground hover:opacity-90"}`}
         >
           {saved ? "✓ Saved!" : "Save Affiliate Settings"}
         </button>
@@ -3667,6 +4049,7 @@ function EbookManagerSection() {
     const next = !storeEnabled;
     setStoreEnabled(next);
     localStorage.setItem("dz_ebook_store_enabled", next ? "true" : "false");
+    broadcastSettingsChange();
     toast.success(
       next ? "eBook Store ON ho gaya! 📚" : "eBook Store OFF ho gaya.",
     );
@@ -4179,6 +4562,576 @@ function EbookManagerSection() {
   );
 }
 
+// ---- App Settings Section ----
+function AppSettingsSection() {
+  const [welcomeMessage, setWelcomeMessage] = useState(
+    () =>
+      localStorage.getItem("dz_welcome_message") ??
+      "Digital Zindagi में आपका स्वागत है",
+  );
+  const [tagline, setTagline] = useState(
+    () =>
+      localStorage.getItem("dz_app_tagline") ??
+      "डिजिटल जिंदगी से जुड़ो और लोकल सर्विस का फायदा उठाओ",
+  );
+  const [footerCopyright, setFooterCopyright] = useState(
+    () => localStorage.getItem("dz_footer_copyright") ?? "",
+  );
+  const [contactPhone, setContactPhone] = useState(
+    () => localStorage.getItem("dz_contact_phone") ?? "+91 98765 43210",
+  );
+  const [contactEmail, setContactEmail] = useState(
+    () =>
+      localStorage.getItem("dz_contact_email") ?? "support@digitalzindagi.in",
+  );
+  const [contactAddress, setContactAddress] = useState(
+    () => localStorage.getItem("dz_contact_address") ?? "Bharat, India",
+  );
+  const [showInstallBtn, setShowInstallBtn] = useState(
+    () => localStorage.getItem("dz_show_install_btn") !== "false",
+  );
+  const [splashEnabled, setSplashEnabled] = useState(
+    () => localStorage.getItem("dz_splash_enabled") !== "false",
+  );
+  const [savedField, setSavedField] = useState<string | null>(null);
+
+  const saveField = (key: string, value: string, label: string) => {
+    localStorage.setItem(key, value);
+    broadcastSettingsChange();
+    setSavedField(label);
+    toast.success(`${label} save ho gaya!`);
+    setTimeout(() => setSavedField(null), 2000);
+  };
+
+  const saveToggle = (key: string, value: boolean, label: string) => {
+    localStorage.setItem(key, value ? "true" : "false");
+    broadcastSettingsChange();
+    toast.success(`${label} ${value ? "ON" : "OFF"} ho gaya!`);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Welcome Message */}
+      <div className="bg-white rounded-2xl border border-border shadow-card p-5 space-y-3">
+        <h3 className="font-heading font-semibold text-foreground">
+          स्वागत संदेश (Welcome Message)
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Login/Signup page पर दिखने वाला संदेश।
+        </p>
+        <input
+          data-ocid="admin.input"
+          type="text"
+          value={welcomeMessage}
+          onChange={(e) => setWelcomeMessage(e.target.value)}
+          className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+        />
+        <button
+          type="button"
+          data-ocid="admin.save_button"
+          onClick={() =>
+            saveField("dz_welcome_message", welcomeMessage, "Welcome Message")
+          }
+          className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold px-5 py-2 rounded-xl text-sm"
+        >
+          {savedField === "Welcome Message" ? "✅ Saved!" : "Save"}
+        </button>
+      </div>
+
+      {/* App Tagline */}
+      <div className="bg-white rounded-2xl border border-border shadow-card p-5 space-y-3">
+        <h3 className="font-heading font-semibold text-foreground">
+          App Tagline
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Homepage पर hero के नीचे दिखने वाली tagline।
+        </p>
+        <input
+          data-ocid="admin.input"
+          type="text"
+          value={tagline}
+          onChange={(e) => setTagline(e.target.value)}
+          className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+        />
+        <button
+          type="button"
+          data-ocid="admin.save_button"
+          onClick={() => saveField("dz_app_tagline", tagline, "App Tagline")}
+          className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold px-5 py-2 rounded-xl text-sm"
+        >
+          {savedField === "App Tagline" ? "✅ Saved!" : "Save"}
+        </button>
+      </div>
+
+      {/* Footer Copyright */}
+      <div className="bg-white rounded-2xl border border-border shadow-card p-5 space-y-3">
+        <h3 className="font-heading font-semibold text-foreground">
+          Footer Copyright Text
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Footer में copyright text। खाली छोड़ने पर default "© Year Digital Zindagi"
+          दिखेगा।
+        </p>
+        <input
+          data-ocid="admin.input"
+          type="text"
+          value={footerCopyright}
+          onChange={(e) => setFooterCopyright(e.target.value)}
+          placeholder="© 2026 Digital Zindagi"
+          className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+        />
+        <button
+          type="button"
+          data-ocid="admin.save_button"
+          onClick={() =>
+            saveField(
+              "dz_footer_copyright",
+              footerCopyright,
+              "Footer Copyright",
+            )
+          }
+          className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold px-5 py-2 rounded-xl text-sm"
+        >
+          {savedField === "Footer Copyright" ? "✅ Saved!" : "Save"}
+        </button>
+      </div>
+
+      {/* Contact Info */}
+      <div className="bg-white rounded-2xl border border-border shadow-card p-5 space-y-4">
+        <h3 className="font-heading font-semibold text-foreground">
+          Contact Information
+        </h3>
+        <div className="space-y-3">
+          <div>
+            <label
+              htmlFor="contact-phone"
+              className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 block"
+            >
+              Phone Number
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="contact-phone"
+                data-ocid="admin.input"
+                type="text"
+                value={contactPhone}
+                onChange={(e) => setContactPhone(e.target.value)}
+                className="flex-1 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+              <button
+                type="button"
+                data-ocid="admin.save_button"
+                onClick={() =>
+                  saveField("dz_contact_phone", contactPhone, "Phone")
+                }
+                className="bg-green-500 hover:bg-green-600 text-white font-bold px-4 py-2.5 rounded-xl text-sm whitespace-nowrap"
+              >
+                {savedField === "Phone" ? "✅" : "Save"}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label
+              htmlFor="contact-email"
+              className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 block"
+            >
+              Email Address
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="contact-email"
+                data-ocid="admin.input"
+                type="email"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+                className="flex-1 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+              <button
+                type="button"
+                data-ocid="admin.save_button"
+                onClick={() =>
+                  saveField("dz_contact_email", contactEmail, "Email")
+                }
+                className="bg-green-500 hover:bg-green-600 text-white font-bold px-4 py-2.5 rounded-xl text-sm whitespace-nowrap"
+              >
+                {savedField === "Email" ? "✅" : "Save"}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label
+              htmlFor="contact-address"
+              className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 block"
+            >
+              Address
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="contact-address"
+                data-ocid="admin.input"
+                type="text"
+                value={contactAddress}
+                onChange={(e) => setContactAddress(e.target.value)}
+                className="flex-1 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+              <button
+                type="button"
+                data-ocid="admin.save_button"
+                onClick={() =>
+                  saveField("dz_contact_address", contactAddress, "Address")
+                }
+                className="bg-green-500 hover:bg-green-600 text-white font-bold px-4 py-2.5 rounded-xl text-sm whitespace-nowrap"
+              >
+                {savedField === "Address" ? "✅" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* App Toggles */}
+      <div className="bg-white rounded-2xl border border-border shadow-card p-5 space-y-3">
+        <h3 className="font-heading font-semibold text-foreground">
+          App Toggles
+        </h3>
+        {[
+          {
+            label: "Install Button (Browser में दिखाएं)",
+            value: showInstallBtn,
+            key: "dz_show_install_btn",
+            set: setShowInstallBtn,
+          },
+          {
+            label: "Splash Screen (Pehli baar dikhe)",
+            value: splashEnabled,
+            key: "dz_splash_enabled",
+            set: setSplashEnabled,
+          },
+        ].map(({ label, value, key, set }) => (
+          <div
+            key={key}
+            className="flex items-center justify-between py-2 border-b border-border last:border-0"
+          >
+            <p className="font-medium text-foreground text-sm">{label}</p>
+            <button
+              type="button"
+              data-ocid="admin.toggle"
+              onClick={() => {
+                const next = !value;
+                set(next);
+                saveToggle(key, next, label);
+              }}
+              className={`relative w-12 h-6 rounded-full transition-colors ${value ? "bg-primary" : "bg-gray-300"}`}
+            >
+              <span
+                className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${value ? "translate-x-7" : "translate-x-1"}`}
+              />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---- Scrap Rates Section ----
+function ScrapRatesSection() {
+  const readRates = () => {
+    try {
+      return JSON.parse(localStorage.getItem("dz_scrap_rates") ?? "{}");
+    } catch {
+      return {};
+    }
+  };
+
+  const [rates, setRates] = useState<Record<string, string>>(readRates);
+  const [saved, setSaved] = useState(false);
+
+  const DEFAULT_ITEMS = [
+    { key: "lohaa", label: "लोहा (Iron)", placeholder: "₹/kg rate" },
+    { key: "kaagaz", label: "कागज (Paper)", placeholder: "₹/kg rate" },
+    { key: "taamba", label: "तांबा (Copper)", placeholder: "₹/kg rate" },
+  ];
+
+  const handleSave = () => {
+    localStorage.setItem("dz_scrap_rates", JSON.stringify(rates));
+    broadcastSettingsChange();
+    setSaved(true);
+    toast.success("Scrap rates save ho gaye! ♻️");
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl border border-border shadow-card p-6 space-y-4">
+        <h3 className="font-heading font-semibold text-foreground">
+          Default Scrap Rates
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          यहां rates set करें — ये Homepage के Rate Calculator में automatically sync
+          हो जाएंगे।
+        </p>
+        <div className="space-y-3">
+          {DEFAULT_ITEMS.map(({ key, label, placeholder }) => (
+            <div key={key}>
+              <label
+                htmlFor={`scrap-${key}`}
+                className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 block"
+              >
+                {label}
+              </label>
+              <input
+                id={`scrap-${key}`}
+                data-ocid="admin.input"
+                type="number"
+                value={rates[key] ?? ""}
+                onChange={(e) =>
+                  setRates((prev) => ({ ...prev, [key]: e.target.value }))
+                }
+                placeholder={placeholder}
+                className="w-full border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          ))}
+        </div>
+
+        <div className="border-t border-border pt-4">
+          <h4 className="font-semibold text-foreground text-sm mb-3">
+            Custom Items (3 aur)
+          </h4>
+          <div className="space-y-3">
+            {[1, 2, 3].map((num) => (
+              <div key={num} className="grid grid-cols-2 gap-2">
+                <input
+                  data-ocid="admin.input"
+                  type="text"
+                  value={rates[`custom${num}name`] ?? ""}
+                  onChange={(e) =>
+                    setRates((prev) => ({
+                      ...prev,
+                      [`custom${num}name`]: e.target.value,
+                    }))
+                  }
+                  placeholder={`Item ${num} naam`}
+                  className="border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+                <input
+                  data-ocid="admin.input"
+                  type="number"
+                  value={rates[`custom${num}rate`] ?? ""}
+                  onChange={(e) =>
+                    setRates((prev) => ({
+                      ...prev,
+                      [`custom${num}rate`]: e.target.value,
+                    }))
+                  }
+                  placeholder="₹/kg rate"
+                  className="border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          data-ocid="admin.save_button"
+          onClick={handleSave}
+          className={`w-full py-3 rounded-xl font-bold text-sm transition-colors ${
+            saved
+              ? "bg-green-500 text-white"
+              : "bg-primary text-primary-foreground hover:opacity-90"
+          }`}
+        >
+          {saved ? "✅ Rates Saved!" : "♻️ Save All Rates"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---- Homepage Controls (Extended) Section ----
+function HomepageControlsExtendedSection() {
+  const readToggles = () => ({
+    dz_show_rate_calculator:
+      localStorage.getItem("dz_show_rate_calculator") !== "false",
+    dz_ebook_store_enabled:
+      localStorage.getItem("dz_ebook_store_enabled") === "true",
+    dz_show_hero_carousel:
+      localStorage.getItem("dz_show_hero_carousel") !== "false",
+    dz_show_category_grid:
+      localStorage.getItem("dz_show_category_grid") !== "false",
+    dz_show_providers: localStorage.getItem("dz_show_providers") !== "false",
+    dz_show_register_banner:
+      localStorage.getItem("dz_show_register_banner") !== "false",
+  });
+
+  const [toggles, setToggles] = useState(readToggles);
+
+  const CONTROLS = [
+    {
+      key: "dz_show_rate_calculator",
+      label: "⚖️ Rate Calculator Button",
+      desc: "Homepage पर Rate Calculator button दिखाएं",
+    },
+    {
+      key: "dz_ebook_store_enabled",
+      label: "📚 eBook Store",
+      desc: "Homepage पर eBook store section दिखाएं",
+    },
+    {
+      key: "dz_show_hero_carousel",
+      label: "🖼️ Hero Carousel/Slider",
+      desc: "Top पर image slider/banner दिखाएं",
+    },
+    {
+      key: "dz_show_category_grid",
+      label: "🗂️ Category Grid",
+      desc: "Service categories grid दिखाएं",
+    },
+    {
+      key: "dz_show_providers",
+      label: "🏪 Providers Section",
+      desc: "Featured providers list दिखाएं",
+    },
+    {
+      key: "dz_show_register_banner",
+      label: "📝 Registration Banner",
+      desc: "Business register करने का banner दिखाएं",
+    },
+  ];
+
+  const handleToggle = (key: string) => {
+    const newVal = !toggles[key as keyof typeof toggles];
+    localStorage.setItem(key, newVal ? "true" : "false");
+    setToggles((prev) => ({ ...prev, [key]: newVal }));
+    broadcastSettingsChange();
+    toast.success("Setting update ho gayi!");
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl border border-border shadow-card overflow-hidden">
+        <div className="px-5 py-4 border-b border-border bg-muted/30">
+          <h3 className="font-heading font-semibold text-foreground">
+            Homepage Sections ON/OFF
+          </h3>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Toggle किसी भी section को instantly hide/show करें।
+          </p>
+        </div>
+        {CONTROLS.map(({ key, label, desc }) => (
+          <div
+            key={key}
+            className="flex items-center justify-between px-5 py-4 border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
+          >
+            <div>
+              <p className="font-medium text-foreground text-sm">{label}</p>
+              <p className="text-xs text-muted-foreground">{desc}</p>
+            </div>
+            <button
+              type="button"
+              data-ocid="admin.toggle"
+              onClick={() => handleToggle(key)}
+              className={`relative w-12 h-6 rounded-full transition-colors ${toggles[key as keyof typeof toggles] ? "bg-primary" : "bg-gray-300"}`}
+            >
+              <span
+                className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${toggles[key as keyof typeof toggles] ? "translate-x-7" : "translate-x-1"}`}
+              />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---- Announcements Section ----
+function AnnouncementsSection() {
+  const [text, setText] = useState(
+    () => localStorage.getItem("dz_announcement") ?? "",
+  );
+  const [enabled, setEnabled] = useState(
+    () => localStorage.getItem("dz_announcement_enabled") === "true",
+  );
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = () => {
+    localStorage.setItem("dz_announcement", text);
+    localStorage.setItem("dz_announcement_enabled", enabled ? "true" : "false");
+    broadcastSettingsChange();
+    setSaved(true);
+    toast.success("Announcement save ho gaya!");
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl border border-border shadow-card p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-heading font-semibold text-foreground">
+            📢 Announcement Banner
+          </h3>
+          <button
+            type="button"
+            data-ocid="admin.toggle"
+            onClick={() => setEnabled((v) => !v)}
+            className={`relative w-12 h-6 rounded-full transition-colors ${enabled ? "bg-primary" : "bg-gray-300"}`}
+          >
+            <span
+              className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${enabled ? "translate-x-7" : "translate-x-1"}`}
+            />
+          </button>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {enabled
+            ? "✅ ON — Homepage पर scrolling marquee bar दिख रहा है।"
+            : "Homepage पर एक scrolling notice/announcement दिखाएं।"}
+        </p>
+        <div>
+          <label
+            htmlFor="announcement-text"
+            className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 block"
+          >
+            Announcement Text
+          </label>
+          <textarea
+            id="announcement-text"
+            data-ocid="admin.textarea"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="App update ho gaya! Naye features check karein..."
+            rows={3}
+            className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring resize-none"
+          />
+        </div>
+        {text && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 overflow-hidden">
+            <p className="text-xs text-amber-600 font-semibold mb-1">
+              Preview:
+            </p>
+            <p className="text-amber-800 text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis">
+              📢 {text}
+            </p>
+          </div>
+        )}
+        <button
+          type="button"
+          data-ocid="admin.save_button"
+          onClick={handleSave}
+          className={`w-full py-3 rounded-xl font-bold text-sm transition-colors ${
+            saved
+              ? "bg-green-500 text-white"
+              : "bg-primary text-primary-foreground hover:opacity-90"
+          }`}
+        >
+          {saved ? "✅ Saved!" : "Save Announcement"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ---- Main Admin Dashboard ----
 export default function AdminDashboardPage() {
   const { user } = useAuth();
@@ -4270,6 +5223,26 @@ export default function AdminDashboardPage() {
       label: "📚 eBook Store",
       icon: <BookOpen size={18} />,
     },
+    {
+      key: "appSettings" as AdminSection,
+      label: "⚙️ App Settings",
+      icon: <Settings size={18} />,
+    },
+    {
+      key: "scrapRates" as AdminSection,
+      label: "♻️ Scrap Rates",
+      icon: <Calculator size={18} />,
+    },
+    {
+      key: "homepageControls" as AdminSection,
+      label: "🏠 Homepage Controls",
+      icon: <Layout size={18} />,
+    },
+    {
+      key: "announcements" as AdminSection,
+      label: "📢 Announcements",
+      icon: <MessageSquare size={18} />,
+    },
   ];
 
   const NAV_ITEMS = isManager
@@ -4324,6 +5297,14 @@ export default function AdminDashboardPage() {
         return <AffiliateMarketingSection />;
       case "ebookManager" as AdminSection:
         return <EbookManagerSection />;
+      case "appSettings" as AdminSection:
+        return <AppSettingsSection />;
+      case "scrapRates" as AdminSection:
+        return <ScrapRatesSection />;
+      case "homepageControls" as AdminSection:
+        return <HomepageControlsExtendedSection />;
+      case "announcements" as AdminSection:
+        return <AnnouncementsSection />;
       default:
         return <UserManagement />;
     }
@@ -4382,7 +5363,7 @@ export default function AdminDashboardPage() {
           <nav
             className={`${
               mobileNavOpen ? "absolute left-0 top-0 h-full" : ""
-            } w-60 bg-white border-r border-border flex flex-col py-4 shadow-lg md:shadow-none`}
+            } w-60 bg-white border-r border-border flex flex-col shadow-lg md:shadow-none overflow-y-auto`}
             data-ocid="admin.panel"
           >
             {NAV_ITEMS.map((item) => (
