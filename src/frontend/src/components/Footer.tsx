@@ -125,6 +125,7 @@ export default function Footer() {
                 { to: "/about", label: t("aboutUs") },
                 { to: "/privacy", label: t("privacy") },
                 { to: "/terms", label: t("terms") },
+                { to: "/delivery-register", label: "🚴 Delivery Boy? Join Us" },
               ].map((l) => (
                 <li key={l.to + l.label}>
                   <Link

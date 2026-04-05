@@ -11,6 +11,9 @@ import AdminDashboardPage from "./pages/AdminDashboardPage";
 import AdminPinPage from "./pages/AdminPinPage";
 import CategoryPage from "./pages/CategoryPage";
 import ChoosePlanPage from "./pages/ChoosePlanPage";
+import DeliveryAppPage from "./pages/DeliveryAppPage";
+import DeliveryOrderPage from "./pages/DeliveryOrderPage";
+import DeliveryRegisterPage from "./pages/DeliveryRegisterPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
@@ -59,7 +62,6 @@ function ManagerRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
-  // Apply saved theme color on mount
   useEffect(() => {
     const savedColor = localStorage.getItem("dz_theme_color");
     if (savedColor) {
@@ -67,7 +69,6 @@ function AppRoutes() {
     }
   }, []);
 
-  // Register service worker
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
@@ -89,6 +90,10 @@ function AppRoutes() {
       <Route path="/orders" element={<OrdersPage />} />
       <Route path="/scrap-calculator" element={<ScrapCalculatorPage />} />
       <Route path="/manager-login" element={<ManagerLoginPage />} />
+      {/* Delivery Module */}
+      <Route path="/delivery-register" element={<DeliveryRegisterPage />} />
+      <Route path="/delivery-app" element={<DeliveryAppPage />} />
+      <Route path="/delivery-order" element={<DeliveryOrderPage />} />
       <Route
         path="/manager"
         element={

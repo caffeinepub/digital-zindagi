@@ -36,6 +36,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ExternalBlob, type SubscriptionPlan } from "../backend";
 import type { Banner, ProviderProfile, User } from "../backend";
+import DeliveryAdminPanel from "../components/DeliveryAdminPanel";
 import { hashPassword, useAuth } from "../contexts/AuthContext";
 import { useActor } from "../hooks/useActor";
 import {
@@ -71,7 +72,8 @@ type AdminSection =
   | "appSettings"
   | "scrapRates"
   | "homepageControls"
-  | "announcements";
+  | "announcements"
+  | "delivery";
 
 const DEFAULT_EMERALD = "#059669";
 
@@ -5243,6 +5245,11 @@ export default function AdminDashboardPage() {
       label: "📢 Announcements",
       icon: <MessageSquare size={18} />,
     },
+    {
+      key: "delivery" as AdminSection,
+      label: "🚴 Delivery Module",
+      icon: <span>🚴</span>,
+    },
   ];
 
   const NAV_ITEMS = isManager
@@ -5305,6 +5312,8 @@ export default function AdminDashboardPage() {
         return <HomepageControlsExtendedSection />;
       case "announcements" as AdminSection:
         return <AnnouncementsSection />;
+      case "delivery" as AdminSection:
+        return <DeliveryAdminPanel />;
       default:
         return <UserManagement />;
     }

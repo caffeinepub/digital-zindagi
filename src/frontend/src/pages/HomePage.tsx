@@ -688,6 +688,49 @@ export default function HomePage() {
           </section>
         )}
 
+        {/* Delivery Service Button */}
+        {(() => {
+          try {
+            const ds = JSON.parse(
+              localStorage.getItem("dz_delivery_settings") || "{}",
+            );
+            if (!ds.serviceEnabled) return null;
+          } catch {
+            return null;
+          }
+          return (
+            <section className="max-w-7xl mx-auto px-4 pt-2 pb-2">
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: 0.05 }}
+              >
+                <button
+                  type="button"
+                  onClick={() => navigate("/delivery-order")}
+                  data-ocid="home.delivery_button"
+                  className="w-full rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 text-white p-5 flex items-center gap-4 shadow-lg hover:shadow-xl hover:from-blue-700 hover:to-blue-600 transition-all active:scale-[0.99]"
+                >
+                  <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center flex-shrink-0">
+                    <span className="text-3xl">🛵</span>
+                  </div>
+                  <div className="text-left flex-1">
+                    <p className="font-heading font-bold text-xl">
+                      🚴 Delivery Bhejein
+                    </p>
+                    <p className="text-white/80 text-sm mt-0.5">
+                      Fast local delivery — Same day, doorstep tak
+                    </p>
+                  </div>
+                  <div className="ml-auto text-white/60 text-2xl flex-shrink-0">
+                    &rarr;
+                  </div>
+                </button>
+              </motion.div>
+            </section>
+          );
+        })()}
+
         {/* eBook Store Section */}
         {homepageSettings.ebookStoreEnabled && ebooks.length > 0 && (
           <section className="max-w-7xl mx-auto px-4 pt-2 pb-6">
