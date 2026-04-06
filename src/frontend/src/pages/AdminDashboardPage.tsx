@@ -37,6 +37,7 @@ import { toast } from "sonner";
 import { ExternalBlob, type SubscriptionPlan } from "../backend";
 import type { Banner, ProviderProfile, User } from "../backend";
 import DeliveryAdminPanel from "../components/DeliveryAdminPanel";
+import EarningDashboardComponent from "../components/EarningDashboard";
 import VideoPlayer from "../components/VideoPlayer";
 import { hashPassword, useAuth } from "../contexts/AuthContext";
 import { useActor } from "../hooks/useActor";
@@ -86,7 +87,11 @@ type AdminSection =
   | "announcements"
   | "delivery"
   | "googleSheets"
-  | "notificationBar";
+  | "notificationBar"
+  | "newsManager"
+  | "jobsManager"
+  | "masterToggles"
+  | "earningDashboard";
 
 const DEFAULT_EMERALD = "#059669";
 
@@ -5761,6 +5766,704 @@ function NotificationBarSection() {
   );
 }
 
+// ============================================================
+// NEWS MANAGER SECTION
+// ============================================================
+function NewsManagerSection() {
+  type NewsItem = {
+    id: string;
+    title: string;
+    summary: string;
+    imageUrl: string;
+    link: string;
+    category: string;
+    createdAt: string;
+  };
+  function readNewsLocal(): NewsItem[] {
+    try {
+      return JSON.parse(localStorage.getItem("dz_news") ?? "[]");
+    } catch {
+      return [];
+    }
+  }
+  function saveNewsLocal(items: NewsItem[]) {
+    localStorage.setItem("dz_news", JSON.stringify(items));
+  }
+
+  const [items, setItems] = useState<NewsItem[]>(readNewsLocal);
+  const [editing, setEditing] = useState<NewsItem | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const emptyItem = (): NewsItem => ({
+    id: Date.now().toString(),
+    title: "",
+    summary: "",
+    imageUrl: "",
+    link: "",
+    category: "",
+    createdAt: new Date().toISOString(),
+  });
+  const [form, setForm] = useState<NewsItem>(emptyItem());
+
+  const handleEdit = (item: NewsItem) => {
+    setForm({ ...item });
+    setEditing(item);
+    setShowForm(true);
+  };
+  const handleNew = () => {
+    setForm(emptyItem());
+    setEditing(null);
+    setShowForm(true);
+  };
+  const handleSave = () => {
+    if (!form.title.trim()) {
+      toast.error("Title zaroori hai");
+      return;
+    }
+    const updated = editing
+      ? items.map((i) => (i.id === editing.id ? { ...form } : i))
+      : [
+          {
+            ...form,
+            id: Date.now().toString(),
+            createdAt: new Date().toISOString(),
+          },
+          ...items,
+        ];
+    setItems(updated);
+    saveNewsLocal(updated);
+    broadcastSettingsChange();
+    setShowForm(false);
+    toast.success("News save ho gayi!");
+  };
+  const handleDelete = (id: string) => {
+    const updated = items.filter((i) => i.id !== id);
+    setItems(updated);
+    saveNewsLocal(updated);
+    broadcastSettingsChange();
+    toast.success("News delete ho gayi");
+  };
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () =>
+      setForm((f) => ({ ...f, imageUrl: reader.result as string }));
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <h3 className="font-heading font-bold text-base text-foreground">
+          📰 News Manager
+        </h3>
+        <button
+          type="button"
+          onClick={handleNew}
+          className="flex items-center gap-2 bg-blue-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-blue-700 transition-colors"
+        >
+          <Plus size={14} /> Add News
+        </button>
+      </div>
+      {showForm && (
+        <div className="bg-white rounded-2xl border border-blue-200 p-5 space-y-4">
+          <h4 className="font-semibold text-sm">
+            {editing ? "News Edit Karein" : "Nayi News Add Karein"}
+          </h4>
+          <div className="space-y-3">
+            <input
+              type="text"
+              placeholder="Title *"
+              value={form.title}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, title: e.target.value }))
+              }
+              className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+            <input
+              type="text"
+              placeholder="Category (e.g. Politics, Tech)"
+              value={form.category}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, category: e.target.value }))
+              }
+              className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+            <textarea
+              placeholder="Summary / Description"
+              value={form.summary}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, summary: e.target.value }))
+              }
+              rows={3}
+              className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring resize-none"
+            />
+            <input
+              type="url"
+              placeholder="Link (Read More URL)"
+              value={form.link}
+              onChange={(e) => setForm((f) => ({ ...f, link: e.target.value }))}
+              className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+            <div>
+              <label
+                htmlFor="news-img-admin"
+                className="text-xs text-muted-foreground block mb-1"
+              >
+                Thumbnail Image
+              </label>
+              {form.imageUrl && (
+                <img
+                  src={form.imageUrl}
+                  alt="thumb"
+                  className="w-full h-28 object-cover rounded-xl mb-2"
+                />
+              )}
+              <label
+                htmlFor="news-img-admin"
+                className="flex items-center gap-2 cursor-pointer border-2 border-dashed border-blue-300 rounded-xl px-4 py-3 hover:border-blue-500 hover:bg-blue-50 transition-colors"
+              >
+                <span className="text-xs text-blue-600 font-semibold">
+                  Gallery se image choose karein
+                </span>
+                <input
+                  id="news-img-admin"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageUpload}
+                />
+              </label>
+              <input
+                type="url"
+                placeholder="Ya image URL paste karein"
+                value={form.imageUrl.startsWith("data:") ? "" : form.imageUrl}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, imageUrl: e.target.value }))
+                }
+                className="w-full mt-2 border border-border rounded-xl px-4 py-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={handleSave}
+              className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl text-sm hover:bg-blue-700"
+            >
+              Save News
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowForm(false)}
+              className="px-6 bg-gray-100 text-gray-700 font-semibold py-3 rounded-xl text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {items.length === 0 ? (
+        <div className="text-center py-12 bg-white rounded-2xl border border-border">
+          <span className="text-4xl block mb-2">📰</span>
+          <p className="text-sm text-muted-foreground">
+            Koi news nahi hai. Add News karein.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="bg-white rounded-2xl border border-border p-4 flex gap-3"
+            >
+              {item.imageUrl && (
+                <img
+                  src={item.imageUrl}
+                  alt={item.title}
+                  className="w-16 h-16 object-cover rounded-xl flex-shrink-0"
+                />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm truncate">{item.title}</p>
+                {item.category && (
+                  <span className="text-xs text-blue-600">{item.category}</span>
+                )}
+                <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                  {item.summary}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleEdit(item)}
+                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl"
+                >
+                  <Pencil size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(item.id)}
+                  className="p-2 text-red-500 hover:bg-red-50 rounded-xl"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// JOBS MANAGER SECTION
+// ============================================================
+function JobsManagerSection() {
+  type JobItem = {
+    id: string;
+    title: string;
+    department: string;
+    location: string;
+    imageUrl: string;
+    link: string;
+    lastDate: string;
+    description: string;
+    createdAt: string;
+  };
+  function readJobsLocal(): JobItem[] {
+    try {
+      return JSON.parse(localStorage.getItem("dz_jobs") ?? "[]");
+    } catch {
+      return [];
+    }
+  }
+  function saveJobsLocal(items: JobItem[]) {
+    localStorage.setItem("dz_jobs", JSON.stringify(items));
+  }
+
+  const [items, setItems] = useState<JobItem[]>(readJobsLocal);
+  const [editing, setEditing] = useState<JobItem | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const emptyItem = (): JobItem => ({
+    id: Date.now().toString(),
+    title: "",
+    department: "",
+    location: "",
+    imageUrl: "",
+    link: "",
+    lastDate: "",
+    description: "",
+    createdAt: new Date().toISOString(),
+  });
+  const [form, setForm] = useState<JobItem>(emptyItem());
+
+  const handleEdit = (item: JobItem) => {
+    setForm({ ...item });
+    setEditing(item);
+    setShowForm(true);
+  };
+  const handleNew = () => {
+    setForm(emptyItem());
+    setEditing(null);
+    setShowForm(true);
+  };
+  const handleSave = () => {
+    if (!form.title.trim()) {
+      toast.error("Title zaroori hai");
+      return;
+    }
+    const updated = editing
+      ? items.map((i) => (i.id === editing.id ? { ...form } : i))
+      : [
+          {
+            ...form,
+            id: Date.now().toString(),
+            createdAt: new Date().toISOString(),
+          },
+          ...items,
+        ];
+    setItems(updated);
+    saveJobsLocal(updated);
+    broadcastSettingsChange();
+    setShowForm(false);
+    toast.success("Job save ho gayi!");
+  };
+  const handleDelete = (id: string) => {
+    const updated = items.filter((i) => i.id !== id);
+    setItems(updated);
+    saveJobsLocal(updated);
+    broadcastSettingsChange();
+    toast.success("Job delete ho gayi");
+  };
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () =>
+      setForm((f) => ({ ...f, imageUrl: reader.result as string }));
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <h3 className="font-heading font-bold text-base text-foreground">
+          💼 Sarkari Jobs Manager
+        </h3>
+        <button
+          type="button"
+          onClick={handleNew}
+          className="flex items-center gap-2 bg-orange-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-orange-600"
+        >
+          <Plus size={14} /> Add Job
+        </button>
+      </div>
+      {showForm && (
+        <div className="bg-white rounded-2xl border border-orange-200 p-5 space-y-4">
+          <h4 className="font-semibold text-sm">
+            {editing ? "Job Edit Karein" : "Nayi Job Add Karein"}
+          </h4>
+          <div className="space-y-3">
+            <input
+              type="text"
+              placeholder="Job Title *"
+              value={form.title}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, title: e.target.value }))
+              }
+              className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="text"
+                placeholder="Department (e.g. Railway)"
+                value={form.department}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, department: e.target.value }))
+                }
+                className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+              <input
+                type="text"
+                placeholder="Location (e.g. Delhi)"
+                value={form.location}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, location: e.target.value }))
+                }
+                className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <input
+              type="text"
+              placeholder="Last Date (e.g. 31 Jan 2026)"
+              value={form.lastDate}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, lastDate: e.target.value }))
+              }
+              className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+            <textarea
+              placeholder="Job Description / Qualification"
+              value={form.description}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, description: e.target.value }))
+              }
+              rows={3}
+              className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring resize-none"
+            />
+            <input
+              type="url"
+              placeholder="Apply Link (official URL)"
+              value={form.link}
+              onChange={(e) => setForm((f) => ({ ...f, link: e.target.value }))}
+              className="w-full border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+            <div>
+              <label
+                htmlFor="job-img-admin"
+                className="text-xs text-muted-foreground block mb-1"
+              >
+                Thumbnail Image (optional)
+              </label>
+              {form.imageUrl && (
+                <img
+                  src={form.imageUrl}
+                  alt="thumb"
+                  className="w-full h-24 object-cover rounded-xl mb-2"
+                />
+              )}
+              <label
+                htmlFor="job-img-admin"
+                className="flex items-center gap-2 cursor-pointer border-2 border-dashed border-orange-300 rounded-xl px-4 py-3 hover:border-orange-500 hover:bg-orange-50"
+              >
+                <span className="text-xs text-orange-600 font-semibold">
+                  Gallery se image choose karein
+                </span>
+                <input
+                  id="job-img-admin"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageUpload}
+                />
+              </label>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={handleSave}
+              className="flex-1 bg-orange-500 text-white font-bold py-3 rounded-xl text-sm"
+            >
+              Save Job
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowForm(false)}
+              className="px-6 bg-gray-100 text-gray-700 font-semibold py-3 rounded-xl text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {items.length === 0 ? (
+        <div className="text-center py-12 bg-white rounded-2xl border border-border">
+          <span className="text-4xl block mb-2">💼</span>
+          <p className="text-sm text-muted-foreground">
+            Koi job nahi hai. Add Job karein.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="bg-white rounded-2xl border border-border p-4 flex gap-3"
+            >
+              {item.imageUrl && (
+                <img
+                  src={item.imageUrl}
+                  alt={item.title}
+                  className="w-16 h-16 object-cover rounded-xl flex-shrink-0"
+                />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm truncate">{item.title}</p>
+                {item.department && (
+                  <span className="text-xs text-orange-600">
+                    {item.department}
+                  </span>
+                )}
+                {item.lastDate && (
+                  <p className="text-xs text-red-600 font-medium">
+                    Last Date: {item.lastDate}
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-col gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleEdit(item)}
+                  className="p-2 text-orange-600 hover:bg-orange-50 rounded-xl"
+                >
+                  <Pencil size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(item.id)}
+                  className="p-2 text-red-500 hover:bg-red-50 rounded-xl"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// MASTER SECTION TOGGLES + AD FREQUENCY + MANAGER LOGIN
+// ============================================================
+const SECTION_TOGGLE_KEYS_LIST = [
+  { key: "dz_section_news", label: "📰 News Section", defaultOn: true },
+  { key: "dz_section_jobs", label: "💼 Sarkari Jobs", defaultOn: true },
+  {
+    key: "dz_section_image_resizer",
+    label: "🖼️ Image Resizer Tool",
+    defaultOn: true,
+  },
+  {
+    key: "dz_section_ai_enhancer",
+    label: "✨ AI Image Enhancer",
+    defaultOn: true,
+  },
+  { key: "dz_section_youtube", label: "▶️ YouTube Videos", defaultOn: true },
+  { key: "dz_section_facebook", label: "📘 Facebook Videos", defaultOn: true },
+  {
+    key: "dz_section_instagram",
+    label: "📸 Instagram Videos",
+    defaultOn: true,
+  },
+];
+
+export function readSectionToggles(): Record<string, boolean> {
+  const result: Record<string, boolean> = {};
+  for (const s of SECTION_TOGGLE_KEYS_LIST) {
+    const val = localStorage.getItem(s.key);
+    result[s.key] = val === null ? s.defaultOn : val === "true";
+  }
+  return result;
+}
+
+function MasterSectionTogglesSection() {
+  const [toggles, setToggles] =
+    useState<Record<string, boolean>>(readSectionToggles);
+  const toggle = (key: string) => {
+    const newVal = !toggles[key];
+    localStorage.setItem(key, newVal ? "true" : "false");
+    setToggles((prev) => ({ ...prev, [key]: newVal }));
+    broadcastSettingsChange();
+    toast.success(`Section ${newVal ? "ON" : "OFF"} kar diya!`);
+  };
+  const [adInterval, setAdInterval] = useState(
+    () => localStorage.getItem("dz_ad_interval_hours") ?? "4",
+  );
+  const saveAdInterval = () => {
+    localStorage.setItem("dz_ad_interval_hours", adInterval);
+    broadcastSettingsChange();
+    toast.success(`Ad frequency: har ${adInterval}h baad ads`);
+  };
+  const [managerEnabled, setManagerEnabled] = useState(
+    () => localStorage.getItem("dz_manager_login_enabled") !== "false",
+  );
+  const toggleManagerLogin = () => {
+    const newVal = !managerEnabled;
+    localStorage.setItem("dz_manager_login_enabled", newVal ? "true" : "false");
+    setManagerEnabled(newVal);
+    broadcastSettingsChange();
+    toast.success(`Manager Login ${newVal ? "Enabled" : "DISABLED"}!`);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-2xl border border-border p-5 space-y-4">
+        <h3 className="font-heading font-bold text-base">
+          🎛️ Section ON/OFF Controls
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          Koi section OFF karo — woh app menu se gayab ho jaayega.
+        </p>
+        <div className="space-y-1">
+          {SECTION_TOGGLE_KEYS_LIST.map((s) => (
+            <div
+              key={s.key}
+              className="flex items-center justify-between py-3 border-b border-border last:border-0"
+            >
+              <span className="text-sm font-medium">{s.label}</span>
+              <button
+                type="button"
+                onClick={() => toggle(s.key)}
+                className="flex items-center gap-2 text-sm font-semibold"
+              >
+                {toggles[s.key] ? (
+                  <>
+                    <ToggleRight size={28} className="text-emerald-600" />
+                    <span className="text-emerald-600 text-xs">ON</span>
+                  </>
+                ) : (
+                  <>
+                    <ToggleLeft size={28} className="text-muted-foreground" />
+                    <span className="text-muted-foreground text-xs">OFF</span>
+                  </>
+                )}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="bg-white rounded-2xl border border-border p-5 space-y-4">
+        <h3 className="font-heading font-bold text-base">
+          ⏰ Ad Frequency Timer
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          User ko kitne ghante baad dobara ads dikhenge.
+        </p>
+        <div className="flex gap-3 items-center">
+          <input
+            type="number"
+            min="1"
+            max="72"
+            value={adInterval}
+            onChange={(e) => setAdInterval(e.target.value)}
+            className="w-24 border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+          />
+          <span className="text-sm text-muted-foreground">Ghante</span>
+          <button
+            type="button"
+            onClick={saveAdInterval}
+            className="flex-1 bg-primary text-primary-foreground font-bold py-3 rounded-xl text-sm"
+          >
+            Save Timer
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {["2", "4", "8", "12", "24"].map((h) => (
+            <button
+              key={h}
+              type="button"
+              onClick={() => {
+                setAdInterval(h);
+                localStorage.setItem("dz_ad_interval_hours", h);
+                toast.success(`${h}h set`);
+              }}
+              className={`text-xs px-3 py-1.5 rounded-lg border font-medium ${adInterval === h ? "bg-primary text-white border-primary" : "bg-white border-border text-foreground"}`}
+            >
+              {h}h
+            </button>
+          ))}
+        </div>
+      </div>
+      <div
+        className={`bg-white rounded-2xl border-2 p-5 space-y-4 ${managerEnabled ? "border-emerald-300" : "border-red-300"}`}
+      >
+        <h3 className="font-heading font-bold text-base">
+          👨‍💼 Manager Login Control
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          Instantly disable/enable manager login.
+        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-semibold text-sm">
+              Manager Login: {managerEnabled ? "Enabled ✅" : "DISABLED 🔴"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={toggleManagerLogin}
+            className={`px-5 py-2.5 rounded-xl font-bold text-sm ${managerEnabled ? "bg-red-100 text-red-700 border border-red-300" : "bg-emerald-100 text-emerald-700 border border-emerald-300"}`}
+          >
+            {managerEnabled ? "🔴 Disable" : "✅ Enable"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// EARNING DASHBOARD SECTION WRAPPER
+// ============================================================
+function EarningDashboardSection() {
+  return <EarningDashboardComponent />;
+}
+
 export default function AdminDashboardPage() {
   const { user } = useAuth();
   const isManager = user?.role === "manager";
@@ -5886,6 +6589,28 @@ export default function AdminDashboardPage() {
       label: "🔔 Notification Bar",
       icon: <span>🔔</span>,
     },
+    {
+      key: "newsManager" as AdminSection,
+      label: "📰 News Manager",
+      icon: <span>📰</span>,
+      managerVisible: true,
+    },
+    {
+      key: "jobsManager" as AdminSection,
+      label: "💼 Jobs Manager",
+      icon: <span>💼</span>,
+      managerVisible: true,
+    },
+    {
+      key: "masterToggles" as AdminSection,
+      label: "🎛️ Master Controls",
+      icon: <span>🎛️</span>,
+    },
+    {
+      key: "earningDashboard" as AdminSection,
+      label: "📊 Earning Dashboard",
+      icon: <span>📊</span>,
+    },
   ];
 
   const NAV_ITEMS = isManager
@@ -5954,6 +6679,14 @@ export default function AdminDashboardPage() {
         return <GoogleSheetsSection />;
       case "notificationBar" as AdminSection:
         return <NotificationBarSection />;
+      case "newsManager" as AdminSection:
+        return <NewsManagerSection />;
+      case "jobsManager" as AdminSection:
+        return <JobsManagerSection />;
+      case "masterToggles" as AdminSection:
+        return <MasterSectionTogglesSection />;
+      case "earningDashboard" as AdminSection:
+        return <EarningDashboardSection />;
       default:
         return <UserManagement />;
     }

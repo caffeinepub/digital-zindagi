@@ -6,6 +6,34 @@ import { getSheetData } from "../utils/googleSheetsSync";
 import InterstitialAd from "./InterstitialAd";
 import VideoPlayer from "./VideoPlayer";
 
+function readSectionTogglesVG(): Record<string, boolean> {
+  const keys = [
+    "dz_section_youtube",
+    "dz_section_facebook",
+    "dz_section_instagram",
+  ];
+  const result: Record<string, boolean> = {};
+  for (const k of keys) {
+    const val = localStorage.getItem(k);
+    result[k] = val === null ? true : val === "true";
+  }
+  return result;
+}
+
+function checkAdFrequency(): boolean {
+  // Returns true if ads can be shown (interval has passed)
+  const intervalHours = Number(
+    localStorage.getItem("dz_ad_interval_hours") ?? "4",
+  );
+  const lastShown = Number(localStorage.getItem("dz_ad_last_shown") ?? "0");
+  const elapsed = (Date.now() - lastShown) / (1000 * 60 * 60);
+  return elapsed >= intervalHours;
+}
+
+function markAdShown(): void {
+  localStorage.setItem("dz_ad_last_shown", String(Date.now()));
+}
+
 type Platform = "all" | "youtube" | "facebook" | "instagram";
 
 function getPlatformKey(platform: string): Platform {
@@ -135,16 +163,26 @@ export default function VideoGallery() {
   const adCheckDone = useRef(false);
 
   useEffect(() => {
-    const rows = getSheetData().filter(
-      (r) => r.videoLink && r.status !== "inactive",
-    );
+    const filterRows = () => {
+      const st = readSectionTogglesVG();
+      return getSheetData().filter((r) => {
+        if (!r.videoLink || r.status === "inactive") return false;
+        const p = (r.platform ?? "").toLowerCase();
+        if ((p === "youtube" || p === "yt") && !st.dz_section_youtube)
+          return false;
+        if ((p === "facebook" || p === "fb") && !st.dz_section_facebook)
+          return false;
+        if ((p === "instagram" || p === "ig") && !st.dz_section_instagram)
+          return false;
+        return true;
+      });
+    };
+    const rows = filterRows();
     setAllRows(rows);
     setCustomAds(getCustomInternalAds());
 
     const handleStorage = () => {
-      const updated = getSheetData().filter(
-        (r) => r.videoLink && r.status !== "inactive",
-      );
+      const updated = filterRows();
       setAllRows(updated);
       adMobConfig.current = getAdMobConfig();
       setCustomAds(getCustomInternalAds());
@@ -209,8 +247,9 @@ export default function VideoGallery() {
       return;
     }
 
-    if (isAdMobEnabled && interstitialId) {
-      // Show pre-video interstitial
+    if (isAdMobEnabled && interstitialId && checkAdFrequency()) {
+      // Show pre-video interstitial (frequency-controlled)
+      markAdShown();
       setPendingVideo(row);
       setInterstitialPhase("pre");
       setShowInterstitial(true);

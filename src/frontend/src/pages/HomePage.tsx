@@ -28,6 +28,21 @@ import { Link, useNavigate } from "../lib/router";
 import { getDistanceKm } from "../utils/locationUtils";
 import { useSettingsListener } from "../utils/settingsSync";
 
+function readHomeSectionToggles() {
+  const keys = [
+    "dz_section_news",
+    "dz_section_jobs",
+    "dz_section_image_resizer",
+    "dz_section_ai_enhancer",
+  ];
+  const result: Record<string, boolean> = {};
+  for (const k of keys) {
+    const val = localStorage.getItem(k);
+    result[k] = val === null ? true : val === "true";
+  }
+  return result;
+}
+
 interface CustomSocialPlatform {
   key: string;
   label: string;
@@ -446,11 +461,14 @@ export default function HomePage() {
   const [homepageSettings, setHomepageSettings] =
     useState(readHomepageSettings);
 
+  const [sectionToggles, setSectionToggles] = useState(readHomeSectionToggles);
+
   const reloadSettings = useCallback(() => {
     setSocialSettings(readSocialSettings());
     setAffiliateSettings(readAffiliateSettings());
     setEbooks(readEbooksHome());
     setHomepageSettings(readHomepageSettings());
+    setSectionToggles(readHomeSectionToggles());
   }, []);
 
   // Re-read settings on focus (in case admin changed them)
@@ -686,6 +704,85 @@ export default function HomePage() {
                 </div>
               </button>
             </motion.div>
+          </section>
+        )}
+
+        {/* Quick Navigation Cards: News, Jobs, Student Tools */}
+        {(sectionToggles.dz_section_news ||
+          sectionToggles.dz_section_jobs ||
+          sectionToggles.dz_section_image_resizer ||
+          sectionToggles.dz_section_ai_enhancer) && (
+          <section className="max-w-7xl mx-auto px-4 pt-2 pb-2">
+            <div className="grid grid-cols-2 gap-2">
+              {sectionToggles.dz_section_news && (
+                <button
+                  type="button"
+                  onClick={() => navigate("/news")}
+                  className="rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 text-white p-4 flex items-center gap-3 shadow-md hover:shadow-lg transition-all active:scale-[0.99]"
+                >
+                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <span className="text-xl">📰</span>
+                  </div>
+                  <div className="text-left flex-1 min-w-0">
+                    <p className="font-heading font-bold text-sm">
+                      Latest News
+                    </p>
+                    <p className="text-white/75 text-xs">Taza khabar</p>
+                  </div>
+                </button>
+              )}
+              {sectionToggles.dz_section_jobs && (
+                <button
+                  type="button"
+                  onClick={() => navigate("/jobs")}
+                  className="rounded-2xl bg-gradient-to-r from-orange-500 to-orange-400 text-white p-4 flex items-center gap-3 shadow-md hover:shadow-lg transition-all active:scale-[0.99]"
+                >
+                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <span className="text-xl">💼</span>
+                  </div>
+                  <div className="text-left flex-1 min-w-0">
+                    <p className="font-heading font-bold text-sm">
+                      Sarkari Jobs
+                    </p>
+                    <p className="text-white/75 text-xs">Naukri dhundho</p>
+                  </div>
+                </button>
+              )}
+              {sectionToggles.dz_section_image_resizer && (
+                <button
+                  type="button"
+                  onClick={() => navigate("/image-resizer")}
+                  className="rounded-2xl bg-gradient-to-r from-purple-600 to-purple-500 text-white p-4 flex items-center gap-3 shadow-md hover:shadow-lg transition-all active:scale-[0.99]"
+                >
+                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <span className="text-xl">🖼️</span>
+                  </div>
+                  <div className="text-left flex-1 min-w-0">
+                    <p className="font-heading font-bold text-sm">
+                      Image Resizer
+                    </p>
+                    <p className="text-white/75 text-xs">Photo compress</p>
+                  </div>
+                </button>
+              )}
+              {sectionToggles.dz_section_ai_enhancer && (
+                <button
+                  type="button"
+                  onClick={() => navigate("/ai-enhancer")}
+                  className="rounded-2xl bg-gradient-to-r from-pink-500 to-violet-600 text-white p-4 flex items-center gap-3 shadow-md hover:shadow-lg transition-all active:scale-[0.99]"
+                >
+                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <span className="text-xl">✨</span>
+                  </div>
+                  <div className="text-left flex-1 min-w-0">
+                    <p className="font-heading font-bold text-sm">
+                      AI Enhancer
+                    </p>
+                    <p className="text-white/75 text-xs">Photo clear karo</p>
+                  </div>
+                </button>
+              )}
+            </div>
           </section>
         )}
 

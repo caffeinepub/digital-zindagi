@@ -9,6 +9,7 @@ import { LanguageProvider } from "./contexts/LanguageContext";
 import { BrowserRouter, Navigate, Route, Routes } from "./lib/router";
 import { runAutoCleanup } from "./utils/autoCleanup";
 
+import AIEnhancerPage from "./pages/AIEnhancerPage";
 import AboutPage from "./pages/AboutPage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
 import AdminPinPage from "./pages/AdminPinPage";
@@ -19,9 +20,12 @@ import DeliveryOrderPage from "./pages/DeliveryOrderPage";
 import DeliveryRegisterPage from "./pages/DeliveryRegisterPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import HomePage from "./pages/HomePage";
+import ImageResizerPage from "./pages/ImageResizerPage";
+import JobsPage from "./pages/JobsPage";
 import LoginPage from "./pages/LoginPage";
 import ManagerDashboardPage from "./pages/ManagerDashboardPage";
 import ManagerLoginPage from "./pages/ManagerLoginPage";
+import NewsPage from "./pages/NewsPage";
 import OrdersPage from "./pages/OrdersPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import ProviderDashboardPage from "./pages/ProviderDashboardPage";
@@ -92,6 +96,10 @@ function AppRoutes() {
         <Route path="/about" element={<AboutPage />} />
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/scrap-calculator" element={<ScrapCalculatorPage />} />
+        <Route path="/news" element={<NewsPage />} />
+        <Route path="/jobs" element={<JobsPage />} />
+        <Route path="/image-resizer" element={<ImageResizerPage />} />
+        <Route path="/ai-enhancer" element={<AIEnhancerPage />} />
         <Route path="/manager-login" element={<ManagerLoginPage />} />
         {/* Delivery Module */}
         <Route path="/delivery-register" element={<DeliveryRegisterPage />} />
