@@ -16,6 +16,7 @@ import Footer from "../components/Footer";
 import Header from "../components/Header";
 import HeroCarousel from "../components/HeroCarousel";
 import ProviderCard from "../components/ProviderCard";
+import VideoGallery from "../components/VideoGallery";
 import { useLanguage } from "../contexts/LanguageContext";
 import {
   useActiveBanners,
@@ -945,6 +946,9 @@ export default function HomePage() {
             </motion.div>
           </section>
         )}
+
+        {/* Video Gallery Section */}
+        <VideoGallery />
 
         {homepageSettings.showRegisterBanner && (
           <section className="px-4 mb-8">

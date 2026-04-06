@@ -1,10 +1,13 @@
 import { Toaster } from "@/components/ui/sonner";
+import type React from "react";
 import { useEffect } from "react";
 import { UserRole } from "./backend";
+import NotificationBar from "./components/NotificationBar";
 import SplashScreen from "./components/SplashScreen";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { BrowserRouter, Navigate, Route, Routes } from "./lib/router";
+import { runAutoCleanup } from "./utils/autoCleanup";
 
 import AboutPage from "./pages/AboutPage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
@@ -63,80 +66,81 @@ function ManagerRoute({ children }: { children: React.ReactNode }) {
 
 function AppRoutes() {
   useEffect(() => {
+    // Apply saved theme color
     const savedColor = localStorage.getItem("dz_theme_color");
     if (savedColor) {
       document.documentElement.style.setProperty("--dz-accent", savedColor);
     }
+    // Run auto-cleanup on app load — purges old orders/chats only
+    runAutoCleanup();
   }, []);
 
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
-    });
-  }
-
   return (
-    <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/signup" element={<SignupPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/search" element={<SearchPage />} />
-      <Route path="/category/:categoryName" element={<CategoryPage />} />
-      <Route path="/provider/:userId" element={<ProviderProfilePage />} />
-      <Route path="/privacy" element={<PrivacyPage />} />
-      <Route path="/terms" element={<TermsPage />} />
-      <Route path="/about" element={<AboutPage />} />
-      <Route path="/orders" element={<OrdersPage />} />
-      <Route path="/scrap-calculator" element={<ScrapCalculatorPage />} />
-      <Route path="/manager-login" element={<ManagerLoginPage />} />
-      {/* Delivery Module */}
-      <Route path="/delivery-register" element={<DeliveryRegisterPage />} />
-      <Route path="/delivery-app" element={<DeliveryAppPage />} />
-      <Route path="/delivery-order" element={<DeliveryOrderPage />} />
-      <Route
-        path="/manager"
-        element={
-          <ManagerRoute>
-            <ManagerDashboardPage />
-          </ManagerRoute>
-        }
-      />
-      <Route
-        path="/provider/choose-plan"
-        element={
-          <ProviderRoute>
-            <ChoosePlanPage />
-          </ProviderRoute>
-        }
-      />
-      <Route
-        path="/provider/subscribe"
-        element={
-          <ProviderRoute>
-            <ProviderSubscribePage />
-          </ProviderRoute>
-        }
-      />
-      <Route
-        path="/provider/dashboard"
-        element={
-          <ProviderRoute>
-            <ProviderDashboardPage />
-          </ProviderRoute>
-        }
-      />
-      <Route path="/admin/pin" element={<AdminPinPage />} />
-      <Route
-        path="/admin"
-        element={
-          <AdminRoute>
-            <AdminDashboardPage />
-          </AdminRoute>
-        }
-      />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <>
+      {/* Top notification bar — only visible when enabled by admin */}
+      <NotificationBar />
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/search" element={<SearchPage />} />
+        <Route path="/category/:categoryName" element={<CategoryPage />} />
+        <Route path="/provider/:userId" element={<ProviderProfilePage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/orders" element={<OrdersPage />} />
+        <Route path="/scrap-calculator" element={<ScrapCalculatorPage />} />
+        <Route path="/manager-login" element={<ManagerLoginPage />} />
+        {/* Delivery Module */}
+        <Route path="/delivery-register" element={<DeliveryRegisterPage />} />
+        <Route path="/delivery-app" element={<DeliveryAppPage />} />
+        <Route path="/delivery-order" element={<DeliveryOrderPage />} />
+        <Route
+          path="/manager"
+          element={
+            <ManagerRoute>
+              <ManagerDashboardPage />
+            </ManagerRoute>
+          }
+        />
+        <Route
+          path="/provider/choose-plan"
+          element={
+            <ProviderRoute>
+              <ChoosePlanPage />
+            </ProviderRoute>
+          }
+        />
+        <Route
+          path="/provider/subscribe"
+          element={
+            <ProviderRoute>
+              <ProviderSubscribePage />
+            </ProviderRoute>
+          }
+        />
+        <Route
+          path="/provider/dashboard"
+          element={
+            <ProviderRoute>
+              <ProviderDashboardPage />
+            </ProviderRoute>
+          }
+        />
+        <Route path="/admin/pin" element={<AdminPinPage />} />
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <AdminDashboardPage />
+            </AdminRoute>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   );
 }
 
