@@ -135,16 +135,21 @@ export default function Header() {
   }, [installPrompt]);
 
   async function handleInstall() {
+    // Try to get prompt from state or global variable
     const prompt =
       installPrompt ??
-      (window.__dzInstallPrompt as BeforeInstallPromptEvent | undefined);
+      (window.__dzInstallPrompt as BeforeInstallPromptEvent | undefined) ??
+      null;
+
     if (prompt) {
       try {
+        // Must be called from user gesture (click handler) — this is correct
         await prompt.prompt();
         const { outcome } = await prompt.userChoice;
         if (outcome === "accepted") {
           toast.success(
             "Digital Zindagi install ho gaya! App List mein dikh raha hai.",
+            { duration: 4000 },
           );
           setInstallPrompt(null);
           setIsInstalled(true);
@@ -152,12 +157,26 @@ export default function Header() {
         } else {
           toast.info(
             "Install cancel kar diya. Baad mein phir try kar sakte hain.",
+            { duration: 4000 },
           );
+          // Keep prompt for next attempt
         }
-      } catch {
+      } catch (err) {
+        console.warn("[DZ Install] prompt() failed:", err);
+        // Prompt may have already been used — clear and show manual instructions
+        window.__dzInstallPrompt = undefined;
+        setInstallPrompt(null);
         showManualInstructions();
       }
     } else {
+      // No prompt available — check if already in standalone mode
+      if (
+        window.matchMedia("(display-mode: standalone)").matches ||
+        (window.navigator as Navigator & { standalone?: boolean }).standalone
+      ) {
+        setIsInstalled(true);
+        return;
+      }
       showManualInstructions();
     }
   }

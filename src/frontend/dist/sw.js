@@ -1,4 +1,4 @@
-const CACHE_NAME = 'digital-zindagi-v5';
+const CACHE_NAME = 'digital-zindagi-v6';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -28,6 +28,12 @@ self.addEventListener('activate', (event) => {
       );
     }).then(() => self.clients.claim())
   );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('fetch', (event) => {

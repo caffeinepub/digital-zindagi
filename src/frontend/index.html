@@ -59,15 +59,26 @@
     <div id="root"></div>
     <!-- Capture PWA install prompt as early as possible -->
     <script>
+      // Store the install prompt globally — capture it as early as possible
       window.__dzInstallPrompt = null;
+      window.__dzInstallReady = false;
+
       window.addEventListener('beforeinstallprompt', function(e) {
+        // CRITICAL: prevent Chrome mini-infobar from appearing
         e.preventDefault();
+        // Save the event for later use when user clicks install button
         window.__dzInstallPrompt = e;
-        window.dispatchEvent(new Event('dz_installprompt_ready'));
+        window.__dzInstallReady = true;
+        // Notify any React components that are already mounted
+        window.dispatchEvent(new CustomEvent('dz_installprompt_ready', { detail: e }));
+        console.log('[DZ PWA] Install prompt captured and ready');
       });
+
       window.addEventListener('appinstalled', function() {
         window.__dzInstallPrompt = null;
+        window.__dzInstallReady = false;
         window.dispatchEvent(new Event('dz_app_installed'));
+        console.log('[DZ PWA] App installed successfully');
       });
     </script>
     <script type="module" src="/src/main.tsx"></script>
@@ -77,13 +88,12 @@
         window.addEventListener('load', function() {
           navigator.serviceWorker.register('/sw.js', { scope: '/' })
             .then(function(reg) {
-              // Check for SW updates
+              console.log('[DZ SW] Registered:', reg.scope);
               reg.addEventListener('updatefound', function() {
                 var newWorker = reg.installing;
                 if (newWorker) {
                   newWorker.addEventListener('statechange', function() {
                     if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                      // New version available — activate immediately
                       newWorker.postMessage({ type: 'SKIP_WAITING' });
                     }
                   });
@@ -91,7 +101,7 @@
               });
             })
             .catch(function(err) {
-              console.warn('SW registration failed:', err);
+              console.warn('[DZ SW] Registration failed:', err);
             });
         });
       }
