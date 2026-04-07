@@ -1,8 +1,9 @@
-import { ArrowLeft, Briefcase, ExternalLink, MapPin } from "lucide-react";
+import { ArrowLeft, Briefcase, MapPin } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import Footer from "../components/Footer";
 import Header from "../components/Header";
+import SafeWebView from "../components/SafeWebView";
 import { useNavigate } from "../lib/router";
 
 export interface JobItem {
@@ -32,12 +33,29 @@ export function saveJobs(items: JobItem[]): void {
 export default function JobsPage() {
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<JobItem[]>(readJobs);
+  const [webViewUrl, setWebViewUrl] = useState<string | null>(null);
+  const [webViewTitle, setWebViewTitle] = useState<string>("");
 
   useEffect(() => {
     const handler = () => setJobs(readJobs());
     window.addEventListener("focus", handler);
     return () => window.removeEventListener("focus", handler);
   }, []);
+
+  const openSafeLink = (url: string, title: string) => {
+    setWebViewUrl(url);
+    setWebViewTitle(title);
+  };
+
+  if (webViewUrl) {
+    return (
+      <SafeWebView
+        url={webViewUrl}
+        title={webViewTitle}
+        onClose={() => setWebViewUrl(null)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -63,6 +81,14 @@ export default function JobsPage() {
               {jobs.length} vacancies
             </p>
           </div>
+        </div>
+
+        {/* Safe WebView notice */}
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 mb-4 flex items-center gap-2">
+          <span className="text-base">🔒</span>
+          <p className="text-xs text-emerald-700 font-medium">
+            Apply Now links ऐप के अंदर खुलेंगे — form data safe rahega
+          </p>
         </div>
 
         {jobs.length === 0 ? (
@@ -120,14 +146,13 @@ export default function JobsPage() {
                       {new Date(job.createdAt).toLocaleDateString("hi-IN")}
                     </span>
                     {job.link && (
-                      <a
-                        href={job.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => openSafeLink(job.link, job.title)}
                         className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors"
                       >
-                        Apply Now <ExternalLink size={12} />
-                      </a>
+                        🔒 Apply Now (Safe)
+                      </button>
                     )}
                   </div>
                 </div>

@@ -1,8 +1,9 @@
-import { ArrowLeft, ExternalLink, Newspaper } from "lucide-react";
+import { ArrowLeft, Newspaper } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import Footer from "../components/Footer";
 import Header from "../components/Header";
+import SafeWebView from "../components/SafeWebView";
 import { useNavigate } from "../lib/router";
 
 export interface NewsItem {
@@ -30,12 +31,29 @@ export function saveNews(items: NewsItem[]): void {
 export default function NewsPage() {
   const navigate = useNavigate();
   const [news, setNews] = useState<NewsItem[]>(readNews);
+  const [webViewUrl, setWebViewUrl] = useState<string | null>(null);
+  const [webViewTitle, setWebViewTitle] = useState<string>("");
 
   useEffect(() => {
     const handler = () => setNews(readNews());
     window.addEventListener("focus", handler);
     return () => window.removeEventListener("focus", handler);
   }, []);
+
+  const openSafeLink = (url: string, title: string) => {
+    setWebViewUrl(url);
+    setWebViewTitle(title);
+  };
+
+  if (webViewUrl) {
+    return (
+      <SafeWebView
+        url={webViewUrl}
+        title={webViewTitle}
+        onClose={() => setWebViewUrl(null)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -106,14 +124,13 @@ export default function NewsPage() {
                       {new Date(item.createdAt).toLocaleDateString("hi-IN")}
                     </span>
                     {item.link && (
-                      <a
-                        href={item.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => openSafeLink(item.link, item.title)}
                         className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors"
                       >
-                        Read More <ExternalLink size={12} />
-                      </a>
+                        🔒 Read More (Safe)
+                      </button>
                     )}
                   </div>
                 </div>

@@ -34,6 +34,8 @@ function readHomeSectionToggles() {
     "dz_section_jobs",
     "dz_section_image_resizer",
     "dz_section_ai_enhancer",
+    "dz_section_age_calculator",
+    "dz_section_percentage_calculator",
   ];
   const result: Record<string, boolean> = {};
   for (const k of keys) {
@@ -196,7 +198,7 @@ function readHomepageSettings() {
       localStorage.getItem("dz_show_register_banner") !== "false",
     tagline:
       localStorage.getItem("dz_app_tagline") ??
-      "डिजिटल जिंदगी से जुड़ो और लोकल सर्विस का फायदा उठाओ",
+      "डिजिटल जिंदगी से जुड़ो और लोकल सर्विस का फायदा उठाओ",
     announcementEnabled:
       localStorage.getItem("dz_announcement_enabled") === "true",
     announcementText: localStorage.getItem("dz_announcement") ?? "",
@@ -501,7 +503,6 @@ export default function HomePage() {
     } catch {}
 
     const enriched: EnrichedProvider[] = providers.map((p) => {
-      // FIX: match by mobile, not just find first with GPS
       const pAny = p as unknown as { mobile?: string };
       const match = lsProviders.find(
         (lp) =>
@@ -609,12 +610,21 @@ export default function HomePage() {
     ...customSocialPlatforms,
   ];
 
+  // Whether any top-section button is visible
+  const hasTopSection =
+    sectionToggles.dz_section_news ||
+    sectionToggles.dz_section_jobs ||
+    sectionToggles.dz_section_image_resizer ||
+    sectionToggles.dz_section_ai_enhancer ||
+    sectionToggles.dz_section_age_calculator ||
+    sectionToggles.dz_section_percentage_calculator;
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
 
       <main className="flex-1">
-        {/* Hero Section — carousel only, logo removed to avoid duplication with header */}
+        {/* Hero Section */}
         {homepageSettings.showHeroCarousel && (
           <section className="bg-emerald-hero px-4 py-4 overflow-hidden w-full">
             <div className="max-w-7xl mx-auto">
@@ -674,44 +684,72 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Rate Calculator — Primary Feature Button */}
+        {/* Rate Calculator + Delivery side-by-side (Rate Calculator = 50% width) */}
         {homepageSettings.showRateCalculator && (
           <section className="max-w-7xl mx-auto px-4 pt-6 pb-2">
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35 }}
+              className="flex gap-2"
             >
+              {/* Rate Calculator — 50% width */}
               <button
                 type="button"
                 onClick={() => navigate("/scrap-calculator")}
                 data-ocid="home.rate_calculator_button"
-                className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white p-5 flex items-center gap-4 shadow-lg hover:shadow-xl hover:from-emerald-700 hover:to-emerald-600 transition-all active:scale-[0.99]"
+                className="w-1/2 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white p-4 flex flex-col items-center gap-2 shadow-lg hover:shadow-xl hover:from-emerald-700 hover:to-emerald-600 transition-all active:scale-[0.99]"
               >
-                <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center flex-shrink-0">
-                  <Calculator size={32} className="text-white" />
+                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                  <Calculator size={26} className="text-white" />
                 </div>
-                <div className="text-left flex-1">
-                  <p className="font-heading font-bold text-xl">
-                    🧮 Rate Calculator
+                <div className="text-center">
+                  <p className="font-heading font-bold text-sm">
+                    🧭 Rate Calculator
                   </p>
-                  <p className="text-white/80 text-sm mt-0.5">
-                    Scrap ka sahi daam pata karein — Lohaa, Kaagaz, Taamba
+                  <p className="text-white/80 text-xs mt-0.5">
+                    Scrap ka sahi daam
                   </p>
-                </div>
-                <div className="ml-auto text-white/60 text-2xl flex-shrink-0">
-                  &rarr;
                 </div>
               </button>
+
+              {/* Delivery — 50% width, only if enabled */}
+              {(() => {
+                try {
+                  const ds = JSON.parse(
+                    localStorage.getItem("dz_delivery_settings") || "{}",
+                  );
+                  if (!ds.serviceEnabled) return null;
+                } catch {
+                  return null;
+                }
+                return (
+                  <button
+                    type="button"
+                    onClick={() => navigate("/delivery-order")}
+                    data-ocid="home.delivery_button"
+                    className="w-1/2 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 text-white p-4 flex flex-col items-center gap-2 shadow-lg hover:shadow-xl transition-all active:scale-[0.99]"
+                  >
+                    <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                      <span className="text-2xl">🚵</span>
+                    </div>
+                    <div className="text-center">
+                      <p className="font-heading font-bold text-sm">
+                        🚗 Delivery
+                      </p>
+                      <p className="text-white/80 text-xs mt-0.5">
+                        Fast local delivery
+                      </p>
+                    </div>
+                  </button>
+                );
+              })()}
             </motion.div>
           </section>
         )}
 
         {/* Quick Navigation Cards: News, Jobs, Student Tools */}
-        {(sectionToggles.dz_section_news ||
-          sectionToggles.dz_section_jobs ||
-          sectionToggles.dz_section_image_resizer ||
-          sectionToggles.dz_section_ai_enhancer) && (
+        {hasTopSection && (
           <section className="max-w-7xl mx-auto px-4 pt-2 pb-2">
             <div className="grid grid-cols-2 gap-2">
               {sectionToggles.dz_section_news && (
@@ -782,52 +820,45 @@ export default function HomePage() {
                   </div>
                 </button>
               )}
+              {/* New: Age Calculator */}
+              {sectionToggles.dz_section_age_calculator && (
+                <button
+                  type="button"
+                  onClick={() => navigate("/age-calculator")}
+                  className="rounded-2xl bg-gradient-to-r from-teal-600 to-teal-500 text-white p-4 flex items-center gap-3 shadow-md hover:shadow-lg transition-all active:scale-[0.99]"
+                >
+                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <span className="text-xl">🎂</span>
+                  </div>
+                  <div className="text-left flex-1 min-w-0">
+                    <p className="font-heading font-bold text-sm">
+                      Age Calculator
+                    </p>
+                    <p className="text-white/75 text-xs">Saal/Mahine/Din</p>
+                  </div>
+                </button>
+              )}
+              {/* New: Percentage Calculator */}
+              {sectionToggles.dz_section_percentage_calculator && (
+                <button
+                  type="button"
+                  onClick={() => navigate("/percentage-calculator")}
+                  className="rounded-2xl bg-gradient-to-r from-indigo-600 to-indigo-500 text-white p-4 flex items-center gap-3 shadow-md hover:shadow-lg transition-all active:scale-[0.99]"
+                >
+                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <span className="text-xl font-bold">%</span>
+                  </div>
+                  <div className="text-left flex-1 min-w-0">
+                    <p className="font-heading font-bold text-sm">
+                      % Calculator
+                    </p>
+                    <p className="text-white/75 text-xs">Marks, Change</p>
+                  </div>
+                </button>
+              )}
             </div>
           </section>
         )}
-
-        {/* Delivery Service Button */}
-        {(() => {
-          try {
-            const ds = JSON.parse(
-              localStorage.getItem("dz_delivery_settings") || "{}",
-            );
-            if (!ds.serviceEnabled) return null;
-          } catch {
-            return null;
-          }
-          return (
-            <section className="max-w-7xl mx-auto px-4 pt-2 pb-2">
-              <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: 0.05 }}
-              >
-                <button
-                  type="button"
-                  onClick={() => navigate("/delivery-order")}
-                  data-ocid="home.delivery_button"
-                  className="w-full rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 text-white p-5 flex items-center gap-4 shadow-lg hover:shadow-xl hover:from-blue-700 hover:to-blue-600 transition-all active:scale-[0.99]"
-                >
-                  <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center flex-shrink-0">
-                    <span className="text-3xl">🛵</span>
-                  </div>
-                  <div className="text-left flex-1">
-                    <p className="font-heading font-bold text-xl">
-                      🚴 Delivery Bhejein
-                    </p>
-                    <p className="text-white/80 text-sm mt-0.5">
-                      Fast local delivery — Same day, doorstep tak
-                    </p>
-                  </div>
-                  <div className="ml-auto text-white/60 text-2xl flex-shrink-0">
-                    &rarr;
-                  </div>
-                </button>
-              </motion.div>
-            </section>
-          );
-        })()}
 
         {/* eBook Store Section */}
         {homepageSettings.ebookStoreEnabled && ebooks.length > 0 && (
@@ -984,7 +1015,7 @@ export default function HomePage() {
               {/* Radius fallback message */}
               {locationUsed && radiusUsed > 2 && (
                 <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-sm text-amber-700 font-medium">
-                  आपके पास अभी 2KM में कोई दुकान नहीं है, दायरा बढ़ा रहे हैं... (
+                  आपके पास अभी 2KM में कोई दुकान नहीं है, दायरा बढ़ा रहे हैं... (
                   {radiusUsed}KM तक की दुकानें दिख रही हैं)
                 </div>
               )}

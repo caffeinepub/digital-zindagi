@@ -13,6 +13,7 @@ import AIEnhancerPage from "./pages/AIEnhancerPage";
 import AboutPage from "./pages/AboutPage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
 import AdminPinPage from "./pages/AdminPinPage";
+import AgeCalculatorPage from "./pages/AgeCalculatorPage";
 import CategoryPage from "./pages/CategoryPage";
 import ChoosePlanPage from "./pages/ChoosePlanPage";
 import DeliveryAppPage from "./pages/DeliveryAppPage";
@@ -27,6 +28,7 @@ import ManagerDashboardPage from "./pages/ManagerDashboardPage";
 import ManagerLoginPage from "./pages/ManagerLoginPage";
 import NewsPage from "./pages/NewsPage";
 import OrdersPage from "./pages/OrdersPage";
+import PercentageCalculatorPage from "./pages/PercentageCalculatorPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import ProviderDashboardPage from "./pages/ProviderDashboardPage";
 import ProviderProfilePage from "./pages/ProviderProfilePage";
@@ -100,6 +102,12 @@ function AppRoutes() {
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/image-resizer" element={<ImageResizerPage />} />
         <Route path="/ai-enhancer" element={<AIEnhancerPage />} />
+        {/* Student Tools */}
+        <Route path="/age-calculator" element={<AgeCalculatorPage />} />
+        <Route
+          path="/percentage-calculator"
+          element={<PercentageCalculatorPage />}
+        />
         <Route path="/manager-login" element={<ManagerLoginPage />} />
         {/* Delivery Module */}
         <Route path="/delivery-register" element={<DeliveryRegisterPage />} />

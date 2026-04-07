@@ -6303,6 +6303,16 @@ const SECTION_TOGGLE_KEYS_LIST = [
     label: "✨ AI Image Enhancer",
     defaultOn: true,
   },
+  {
+    key: "dz_section_age_calculator",
+    label: "🎂 Age Calculator",
+    defaultOn: true,
+  },
+  {
+    key: "dz_section_percentage_calculator",
+    label: "% Percentage Calculator",
+    defaultOn: true,
+  },
   { key: "dz_section_youtube", label: "▶️ YouTube Videos", defaultOn: true },
   { key: "dz_section_facebook", label: "📘 Facebook Videos", defaultOn: true },
   {
