@@ -34,8 +34,7 @@ import {
 import { motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ExternalBlob, type SubscriptionPlan } from "../backend";
-import type { Banner, ProviderProfile, User } from "../backend";
+import { ExternalBlob } from "../backend";
 import DeliveryAdminPanel from "../components/DeliveryAdminPanel";
 import EarningDashboardComponent from "../components/EarningDashboard";
 import VideoPlayer from "../components/VideoPlayer";
@@ -56,6 +55,12 @@ import {
   useUsersByRole,
 } from "../hooks/useQueries";
 import { useNavigate } from "../lib/router";
+import type {
+  Banner,
+  ProviderProfile,
+  SubscriptionPlan,
+  User,
+} from "../types/appTypes";
 import {
   type SheetRow,
   addManualRow,
@@ -332,7 +337,7 @@ function UserManagement() {
     ? baseUsers.filter(
         (u) =>
           u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          u.mobile.toLowerCase().includes(searchQuery.toLowerCase()),
+          (u.mobile ?? "").toLowerCase().includes(searchQuery.toLowerCase()),
       )
     : baseUsers;
 
@@ -3058,21 +3063,18 @@ function SubscriptionPricingSection() {
     setSaving(true);
     try {
       await actor.updateSubscriptionPricing({
-        oneMonthPrice: BigInt(
+        oneMonthPrice:
           Number.parseInt(oneMonth) ||
-            Number.parseInt(pricing?.oneMonthPrice.toString() ?? "199") ||
-            199,
-        ),
-        threeMonthPrice: BigInt(
+          Number.parseInt((pricing?.oneMonthPrice ?? 199).toString()) ||
+          199,
+        threeMonthPrice:
           Number.parseInt(threeMonths) ||
-            Number.parseInt(pricing?.threeMonthPrice.toString() ?? "499") ||
-            499,
-        ),
-        twelveMonthPrice: BigInt(
+          Number.parseInt((pricing?.threeMonthPrice ?? 499).toString()) ||
+          499,
+        twelveMonthPrice:
           Number.parseInt(twelveMonths) ||
-            Number.parseInt(pricing?.twelveMonthPrice.toString() ?? "1499") ||
-            1499,
-        ),
+          Number.parseInt((pricing?.twelveMonthPrice ?? 1499).toString()) ||
+          1499,
       });
       toast.success("Pricing update ho gayi!");
     } catch (err: any) {
@@ -6318,6 +6320,11 @@ const SECTION_TOGGLE_KEYS_LIST = [
   {
     key: "dz_section_instagram",
     label: "📸 Instagram Videos",
+    defaultOn: true,
+  },
+  {
+    key: "dz_game_visible",
+    label: "🎮 Real Human Game Section",
     defaultOn: true,
   },
 ];

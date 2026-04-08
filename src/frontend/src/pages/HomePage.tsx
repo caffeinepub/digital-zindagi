@@ -287,7 +287,7 @@ function EbookBuyModal({
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 40 }}
         transition={{ duration: 0.25 }}
-        className="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md overflow-hidden"
+        className="bg-card rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md overflow-hidden"
       >
         {/* Header */}
         <div className="bg-emerald-header text-white px-5 py-4 flex items-start justify-between gap-3">
@@ -601,7 +601,7 @@ export default function HomePage() {
       url:
         (socialSettings[`${p.key}Url` as keyof SocialSettings] as string) ?? "",
       icon: <span style={{ fontSize: "22px" }}>{p.icon}</span>,
-      color: "bg-gray-600",
+      color: "bg-muted-foreground",
       label: p.label,
     }));
 
@@ -618,6 +618,9 @@ export default function HomePage() {
     sectionToggles.dz_section_ai_enhancer ||
     sectionToggles.dz_section_age_calculator ||
     sectionToggles.dz_section_percentage_calculator;
+
+  // Game section admin toggle
+  const gameVisible = localStorage.getItem("dz_game_visible") !== "false";
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -652,7 +655,8 @@ export default function HomePage() {
             </div>
           )}
 
-        <section className="bg-white border-b border-border px-4 py-4">
+        {/* Search Bar */}
+        <section className="bg-card border-b border-border px-4 py-4">
           <div className="max-w-2xl mx-auto">
             <form
               onSubmit={(e) => {
@@ -670,7 +674,7 @@ export default function HomePage() {
                 data-ocid="home.search_input"
                 type="text"
                 placeholder={t("search")}
-                className="flex-1 border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring bg-white"
+                className="flex-1 border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring bg-background"
                 aria-label="Search"
               />
               <button
@@ -683,6 +687,89 @@ export default function HomePage() {
             </form>
           </div>
         </section>
+
+        {/* === REAL HUMAN GAME FEATURED SECTION — Main Attraction === */}
+        {gameVisible && (
+          <section
+            className="px-4 pt-6 pb-2 max-w-7xl mx-auto"
+            data-ocid="game-featured-section"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="relative rounded-2xl overflow-hidden"
+              style={{
+                background:
+                  "linear-gradient(135deg, #020a04 0%, #061208 40%, #0a1e10 100%)",
+                border: "1px solid rgba(0,255,100,0.2)",
+                boxShadow: "0 0 30px rgba(0,100,40,0.15)",
+              }}
+            >
+              {/* Background scene image */}
+              <div
+                className="absolute inset-0 opacity-50"
+                style={{
+                  backgroundImage:
+                    "url(/assets/generated/game-scene-bg.dim_1920x1080.jpg)",
+                  backgroundSize: "cover",
+                  backgroundPosition: "center top",
+                }}
+              />
+              <div
+                className="absolute inset-0"
+                style={{
+                  background:
+                    "linear-gradient(90deg, rgba(2,5,3,0.92) 0%, rgba(2,5,3,0.7) 60%, rgba(2,5,3,0.5) 100%)",
+                }}
+              />
+
+              <div className="relative z-10 p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center gap-5">
+                <div className="flex-1">
+                  <div
+                    className="text-3xl font-bold mb-1"
+                    style={{
+                      color: "#00ff88",
+                      textShadow: "0 0 20px rgba(0,255,136,0.5)",
+                    }}
+                  >
+                    🔥 Real Human
+                  </div>
+                  <div className="text-sm mb-3" style={{ color: "#f0c040" }}>
+                    Digital Zindagi — 3D Battle Game
+                  </div>
+                  <p
+                    className="text-sm mb-4"
+                    style={{ color: "rgba(255,255,255,0.75)" }}
+                  >
+                    Post-apocalyptic arena mein mutant hounds aur alien demons
+                    se ladho! Apna photo laga hero ke chehre par, coins collect
+                    karo aur high score banao.
+                  </p>
+                  <div
+                    className="flex flex-wrap gap-3 text-xs"
+                    style={{ color: "rgba(255,255,255,0.5)" }}
+                  >
+                    <span>⚔ Squad of 3</span>
+                    <span>👾 AI Enemies</span>
+                    <span>🪙 Coin Collection</span>
+                    <span>📱 Mobile-First</span>
+                  </div>
+                </div>
+                <div className="flex-shrink-0 w-full md:w-auto">
+                  <Link
+                    to="/game"
+                    data-ocid="game-cta-btn"
+                    className="game-cta-gold w-full md:w-auto px-8 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-3 transition-all hover:scale-105"
+                  >
+                    <span className="text-2xl">🎮</span>
+                    Khelo Abhi!
+                  </Link>
+                </div>
+              </div>
+            </motion.div>
+          </section>
+        )}
 
         {/* Rate Calculator + Delivery side-by-side (Rate Calculator = 50% width) */}
         {homepageSettings.showRateCalculator && (
@@ -820,7 +907,6 @@ export default function HomePage() {
                   </div>
                 </button>
               )}
-              {/* New: Age Calculator */}
               {sectionToggles.dz_section_age_calculator && (
                 <button
                   type="button"
@@ -838,7 +924,6 @@ export default function HomePage() {
                   </div>
                 </button>
               )}
-              {/* New: Percentage Calculator */}
               {sectionToggles.dz_section_percentage_calculator && (
                 <button
                   type="button"
@@ -890,7 +975,7 @@ export default function HomePage() {
                     <div
                       key={book.id}
                       data-ocid="ebook.card"
-                      className="bg-white rounded-2xl border border-border shadow-card overflow-hidden flex flex-col"
+                      className="bg-card rounded-2xl border border-border shadow-card overflow-hidden flex flex-col"
                     >
                       {book.coverUrl ? (
                         <img
@@ -1026,7 +1111,7 @@ export default function HomePage() {
                     (sk) => (
                       <div
                         key={sk}
-                        className="h-40 bg-gray-100 animate-pulse rounded-2xl"
+                        className="h-40 bg-muted animate-pulse rounded-2xl"
                       />
                     ),
                   )}
@@ -1095,7 +1180,7 @@ export default function HomePage() {
                 <Link
                   to="/signup"
                   data-ocid="home.primary_button"
-                  className="bg-white text-emerald-800 font-bold px-8 py-3 rounded-full hover:bg-emerald-50 transition-colors whitespace-nowrap"
+                  className="bg-card text-emerald-800 font-bold px-8 py-3 rounded-full hover:bg-emerald-50 transition-colors whitespace-nowrap"
                 >
                   {t("registerNow")}
                 </Link>
@@ -1134,7 +1219,7 @@ export default function HomePage() {
                         target="_blank"
                         rel="noopener noreferrer"
                         data-ocid="home.primary_button"
-                        className="flex-shrink-0 bg-white text-emerald-700 font-bold px-4 py-2 rounded-full hover:bg-emerald-50 transition-colors text-sm shadow-md"
+                        className="flex-shrink-0 bg-card text-emerald-700 font-bold px-4 py-2 rounded-full hover:bg-emerald-50 transition-colors text-sm shadow-md"
                       >
                         {link.emoji} {link.title}
                       </a>
@@ -1146,7 +1231,7 @@ export default function HomePage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     data-ocid="home.primary_button"
-                    className="flex-shrink-0 bg-white text-emerald-700 font-bold px-7 py-2.5 rounded-full hover:bg-emerald-50 transition-colors text-sm shadow-md"
+                    className="flex-shrink-0 bg-card text-emerald-700 font-bold px-7 py-2.5 rounded-full hover:bg-emerald-50 transition-colors text-sm shadow-md"
                   >
                     Join Now &rarr;
                   </a>
@@ -1163,7 +1248,7 @@ export default function HomePage() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35 }}
-              className="bg-white border border-border rounded-2xl p-5 shadow-card"
+              className="bg-card border border-border rounded-2xl p-5 shadow-card"
             >
               <p className="text-center text-sm font-semibold text-muted-foreground mb-4">
                 Hamare Social Media par Follow Karein

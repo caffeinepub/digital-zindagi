@@ -1,0 +1,176 @@
+import * as THREE from "three";
+
+/**
+ * Crops an image to a circular face region (center-focused) and returns a Three.js CanvasTexture.
+ * Size: 256x256. No external APIs — pure canvas manipulation.
+ */
+export function createFaceTexture(
+  imageSrc: string,
+  onReady: (texture: THREE.CanvasTexture) => void,
+): void {
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.onload = () => {
+    const canvas = document.createElement("canvas");
+    const size = 256;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Clip to circle
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+
+    // Draw image centered and cropped to square (upper-center for face focus)
+    const aspect = img.width / img.height;
+    let sx = 0;
+    let sy = 0;
+    let sw = img.width;
+    let sh = img.height;
+    if (aspect > 1) {
+      // wider than tall — crop sides
+      sw = img.height;
+      sx = (img.width - sw) / 2;
+    } else {
+      // taller than wide — take top portion (face area)
+      sh = img.width;
+      sy = Math.min(img.height * 0.05, img.height - sh); // slight top offset
+    }
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, size, size);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    onReady(texture);
+  };
+  img.onerror = () => {
+    // Fallback: solid emerald circle with "DZ" text
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.beginPath();
+    ctx.arc(128, 128, 128, 0, Math.PI * 2);
+    ctx.fillStyle = "#064420";
+    ctx.fill();
+    ctx.fillStyle = "#f0c040";
+    ctx.font = "bold 80px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("DZ", 128, 128);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    onReady(texture);
+  };
+  img.src = imageSrc;
+}
+
+/**
+ * Creates a canvas texture for text (e.g. Hindi signboards).
+ */
+export function createTextTexture(
+  text: string,
+  opts: {
+    width?: number;
+    height?: number;
+    bgColor?: string;
+    textColor?: string;
+    fontSize?: number;
+    font?: string;
+  } = {},
+): THREE.CanvasTexture {
+  const {
+    width = 512,
+    height = 128,
+    bgColor = "rgba(10,40,20,0.95)",
+    textColor = "#f0c040",
+    fontSize = 48,
+    font = "bold sans-serif",
+  } = opts;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return new THREE.CanvasTexture(canvas);
+
+  // Background
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, width, height);
+
+  // Gold border
+  ctx.strokeStyle = "#f0c040";
+  ctx.lineWidth = 6;
+  ctx.strokeRect(6, 6, width - 12, height - 12);
+
+  // Text
+  ctx.fillStyle = textColor;
+  ctx.font = `${fontSize}px ${font}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  // Text shadow/glow
+  ctx.shadowColor = "#f0c040";
+  ctx.shadowBlur = 12;
+  ctx.fillText(text, width / 2, height / 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+/**
+ * Creates a glowing "Digital Zindagi" logo texture for the building wall.
+ */
+export function createDZLogoTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return new THREE.CanvasTexture(canvas);
+
+  // Dark background
+  ctx.fillStyle = "#050a08";
+  ctx.fillRect(0, 0, 1024, 512);
+
+  // Glow layers for "Digital Zindagi"
+  const text = "Digital Zindagi";
+  ctx.font = "bold 120px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  // Multiple glow passes
+  for (let i = 4; i > 0; i--) {
+    ctx.shadowColor = i % 2 === 0 ? "#ff6600" : "#00ff88";
+    ctx.shadowBlur = i * 20;
+    ctx.fillStyle = i % 2 === 0 ? "rgba(255,100,0,0.3)" : "rgba(0,200,100,0.3)";
+    ctx.fillText(text, 512, 220);
+  }
+
+  // Final bright text
+  ctx.shadowColor = "#00ff88";
+  ctx.shadowBlur = 30;
+  ctx.fillStyle = "#80ffcc";
+  ctx.fillText(text, 512, 220);
+
+  // Fire emoji accent
+  ctx.font = "80px sans-serif";
+  ctx.shadowColor = "#ff6600";
+  ctx.shadowBlur = 40;
+  ctx.fillText("🔥", 180, 200);
+  ctx.fillText("🔥", 844, 200);
+
+  // Hindi tagline
+  ctx.font = "bold 56px sans-serif";
+  ctx.fillStyle = "#f0c040";
+  ctx.shadowColor = "#f0c040";
+  ctx.shadowBlur = 20;
+  ctx.fillText("डिजिटल ज़िंदगी", 512, 380);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return texture;
+}
