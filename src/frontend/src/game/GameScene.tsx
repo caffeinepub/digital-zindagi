@@ -6,7 +6,9 @@ import { EnemyManager, type EnemyRef } from "./entities/EnemyManager";
 import {
   BuildingWall,
   BurningVehicles,
+  CityRuins,
   Debris,
+  GiantDZLogo,
   Ground,
   SceneLighting,
   Skeletons,
@@ -62,6 +64,8 @@ export function GameScene({ keys, joystick }: GameSceneProps) {
       <Skeletons />
       <BurningVehicles />
       <BuildingWall />
+      <CityRuins />
+      <GiantDZLogo />
 
       <Hero
         onPositionChange={handleHeroPositionChange}

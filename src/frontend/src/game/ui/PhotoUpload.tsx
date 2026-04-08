@@ -1,4 +1,4 @@
-import { RefreshCw, Upload } from "lucide-react";
+import { Camera, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { useGameStore } from "../stores/gameStore";
 
@@ -21,7 +21,6 @@ export default function PhotoUpload() {
       const file = e.target.files?.[0];
       if (!file) return;
 
-      // Use canvas to crop center-square at 128x128 (face mapping)
       const img = new Image();
       const url = URL.createObjectURL(file);
       img.onload = () => {
@@ -40,8 +39,6 @@ export default function PhotoUpload() {
         URL.revokeObjectURL(url);
       };
       img.src = url;
-
-      // Reset input for re-selection
       e.target.value = "";
     },
     [setHeroFace],
@@ -67,21 +64,44 @@ export default function PhotoUpload() {
       />
 
       {heroFace ? (
-        <div className="flex flex-col items-center gap-2">
-          <img
-            src={heroFace}
-            alt="Hero face preview"
-            className="w-16 h-16 rounded-full object-cover"
-            style={{
-              border: "3px solid #f0c040",
-              boxShadow: "0 0 12px rgba(240,192,64,0.4)",
-            }}
-          />
-          <div className="flex gap-2">
+        <div className="flex flex-col items-center gap-3 w-full">
+          {/* Circular face preview */}
+          <div className="relative flex flex-col items-center gap-1.5">
+            <div className="relative">
+              <img
+                src={heroFace}
+                alt="Hero face preview"
+                className="w-20 h-20 rounded-full object-cover"
+                style={{
+                  border: "3px solid #f0c040",
+                  boxShadow:
+                    "0 0 20px rgba(240,192,64,0.5), 0 0 40px rgba(240,192,64,0.2)",
+                }}
+              />
+              {/* Animated ring */}
+              <div
+                className="absolute inset-0 rounded-full pointer-events-none"
+                style={{
+                  border: "2px solid rgba(0,255,136,0.5)",
+                  transform: "scale(1.12)",
+                  animation: "spin 6s linear infinite",
+                }}
+              />
+            </div>
+            <div
+              className="text-xs font-bold tracking-wide"
+              style={{ color: "#00ff88" }}
+            >
+              ✓ Your Hero Face
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex gap-2 w-full">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all"
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all"
               style={{
                 border: "1px solid #f0c040",
                 color: "#f0c040",
@@ -95,31 +115,68 @@ export default function PhotoUpload() {
             <button
               type="button"
               onClick={handleClear}
-              className="px-3 py-2 rounded-xl text-xs opacity-50 hover:opacity-80 transition-opacity"
+              className="px-3 py-2.5 rounded-xl text-xs flex items-center gap-1 transition-all hover:bg-red-900/30"
               style={{
-                color: "#aaa",
-                border: "1px solid rgba(255,255,255,0.1)",
+                color: "#ff6666",
+                border: "1px solid rgba(255,100,100,0.25)",
               }}
+              aria-label="Remove face"
+              data-ocid="remove-face-btn"
             >
+              <Trash2 size={13} />
               हटाएं
             </button>
           </div>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2 text-sm font-semibold transition-all"
-          style={{
-            border: "1px dashed rgba(240,192,64,0.5)",
-            color: "#f0c040",
-            background: "rgba(240,192,64,0.06)",
-          }}
-          data-ocid="upload-face-btn"
-        >
-          <Upload size={18} />
-          अपनी फोटो लगाओ (Hero Face)
-        </button>
+        <div className="w-full flex flex-col items-center gap-3">
+          {/* Placeholder circle */}
+          <div className="flex flex-col items-center gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-20 h-20 rounded-full flex flex-col items-center justify-center transition-all hover:scale-105"
+              style={{
+                border: "2px dashed rgba(240,192,64,0.5)",
+                background:
+                  "radial-gradient(circle, rgba(6,68,32,0.8) 0%, rgba(2,5,3,0.8) 100%)",
+                color: "#f0c040",
+              }}
+              aria-label="Upload hero face"
+              data-ocid="upload-face-circle-btn"
+            >
+              <Camera size={24} style={{ color: "#f0c040" }} />
+              <span
+                className="text-xs mt-1 font-semibold"
+                style={{ color: "#f0c040" }}
+              >
+                DZ
+              </span>
+            </button>
+            <div
+              className="text-xs text-center opacity-60"
+              style={{ color: "#ccc" }}
+            >
+              अपना चेहरा लगाओ
+            </div>
+          </div>
+
+          {/* Upload button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2 text-sm font-semibold transition-all hover:scale-[1.01]"
+            style={{
+              border: "1px dashed rgba(240,192,64,0.5)",
+              color: "#f0c040",
+              background: "rgba(240,192,64,0.06)",
+            }}
+            data-ocid="upload-face-btn"
+          >
+            <Upload size={18} />
+            अपनी फोटो लगाओ (Hero Face)
+          </button>
+        </div>
       )}
     </div>
   );

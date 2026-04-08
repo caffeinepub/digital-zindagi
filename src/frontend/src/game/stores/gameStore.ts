@@ -1,10 +1,11 @@
 import { create } from "zustand";
 
 export type GamePhase = "start" | "playing" | "paused" | "gameover";
+export type WeaponType = "rifle" | "shotgun" | "plasma";
 
 export interface Enemy {
   id: string;
-  type: "hound" | "demon";
+  type: "hound" | "demon" | "triHound" | "alienDemon";
   position: [number, number, number];
   hp: number;
   maxHp: number;
@@ -30,6 +31,14 @@ export interface GameState {
   heroFace: string | null;
   volume: number;
 
+  // Weapon system
+  currentWeapon: WeaponType;
+  setWeapon: (weapon: WeaponType) => void;
+
+  // Leaderboard UI
+  leaderboardVisible: boolean;
+  setLeaderboardVisible: (visible: boolean) => void;
+
   // Actions
   setHeroHP: (hp: number) => void;
   damageHero: (dmg: number) => void;
@@ -49,12 +58,29 @@ const STORAGE_HIGH_SCORE = "dz_game_high_score";
 const STORAGE_HERO_FACE = "dz_game_hero_face";
 const STORAGE_COINS = "dz_game_coins_session";
 const STORAGE_VOLUME = "dz_game_volume";
+const STORAGE_WEAPON = "dz_game_weapon";
 
-function loadInitial() {
+function loadInitial(): Omit<
+  GameState,
+  | "setWeapon"
+  | "setLeaderboardVisible"
+  | "setHeroHP"
+  | "damageHero"
+  | "healHero"
+  | "setPartnerHP"
+  | "damagePartner"
+  | "addScore"
+  | "addCoins"
+  | "setGamePhase"
+  | "setHeroFace"
+  | "setVolume"
+  | "nextWave"
+  | "resetGame"
+> {
   return {
     heroHP: 100,
     heroMaxHP: 100,
-    partnerHP: [80, 80] as [number, number],
+    partnerHP: [80, 80],
     partnerMaxHP: 80,
     score: 0,
     waveCount: 1,
@@ -62,11 +88,21 @@ function loadInitial() {
     gamePhase: "start" as GamePhase,
     heroFace: localStorage.getItem(STORAGE_HERO_FACE),
     volume: Number(localStorage.getItem(STORAGE_VOLUME) || "0.7"),
+    currentWeapon:
+      (localStorage.getItem(STORAGE_WEAPON) as WeaponType) || "rifle",
+    leaderboardVisible: false,
   };
 }
 
 export const useGameStore = create<GameState>((set) => ({
   ...loadInitial(),
+
+  setWeapon: (weapon) => {
+    localStorage.setItem(STORAGE_WEAPON, weapon);
+    set({ currentWeapon: weapon });
+  },
+
+  setLeaderboardVisible: (leaderboardVisible) => set({ leaderboardVisible }),
 
   setHeroHP: (hp) => set({ heroHP: Math.max(0, Math.min(100, hp)) }),
 

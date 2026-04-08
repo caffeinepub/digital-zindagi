@@ -1,24 +1,98 @@
-import { ArrowLeft, Play, RotateCcw } from "lucide-react";
+import { ArrowLeft, Play, RotateCcw, Trophy } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { GameCanvas } from "../game/GameCanvas";
 import { getHighScore, useGameStore } from "../game/stores/gameStore";
 import AttackButton from "../game/ui/AttackButton";
 import GameHUD from "../game/ui/GameHUD";
+import Leaderboard from "../game/ui/Leaderboard";
 import PhotoUpload from "../game/ui/PhotoUpload";
 import VirtualJoystick from "../game/ui/VirtualJoystick";
-import { SFX, resumeAudio } from "../game/utils/audioEngine";
+import { GameAudio, SFX, resumeAudio } from "../game/utils/audioEngine";
+import {
+  type LeaderboardEntry,
+  addScore as addLeaderboardScore,
+  isHighScore,
+} from "../game/utils/leaderboard";
 import { Link } from "../lib/router";
 
+// ─── Rotate Warning Overlay ───────────────────────────────────────────────────
+
+function RotateWarning() {
+  return (
+    <div
+      className="fixed inset-0 flex flex-col items-center justify-center z-[9999] select-none"
+      style={{
+        background:
+          "linear-gradient(135deg, #064420 0%, #000 60%, #0a0a0a 100%)",
+      }}
+      data-ocid="rotate-warning"
+    >
+      {/* Animated rotate icon */}
+      <div
+        style={{
+          fontSize: 72,
+          animation: "spin 2s linear infinite",
+          display: "inline-block",
+        }}
+      >
+        📱
+      </div>
+
+      <div
+        className="text-2xl font-black text-center mt-6 px-8"
+        style={{ color: "#00ff88", textShadow: "0 0 20px #00ff88" }}
+      >
+        Please rotate your device
+        <br />
+        to play Digital Zindagi
+      </div>
+      <div
+        className="text-base font-semibold text-center mt-3 px-8"
+        style={{ color: "#f0c040", textShadow: "0 0 10px #f0c040" }}
+      >
+        डिजिटल ज़िंदगी खेलने के लिए फोन घुमाएँ 🔄
+      </div>
+
+      <div className="mt-8 opacity-60" style={{ color: "#aaa", fontSize: 14 }}>
+        🎮 Digital Zindagi — Real Human
+      </div>
+
+      <style>{`
+        @keyframes spin {
+          0%   { transform: rotate(0deg); }
+          25%  { transform: rotate(90deg); }
+          50%  { transform: rotate(90deg); }
+          75%  { transform: rotate(0deg); }
+          100% { transform: rotate(0deg); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ─── Main GamePage ─────────────────────────────────────────────────────────────
+
 export default function GamePage() {
-  const { score, waveCount, coins, heroHP, gamePhase, resetGame, volume } =
-    useGameStore();
+  const {
+    score,
+    waveCount,
+    coins,
+    heroHP,
+    gamePhase,
+    resetGame,
+    volume,
+    leaderboardVisible,
+    setLeaderboardVisible,
+  } = useGameStore();
 
   const keys = useRef<Set<string>>(new Set());
   const joystick = useRef({ x: 0, y: 0 });
-  const ambientStop = useRef<(() => void) | null>(null);
+  const [showRotateWarning, setShowRotateWarning] = useState(false);
+  const [latestEntry, setLatestEntry] = useState<LeaderboardEntry | null>(null);
+  const gameOverHandled = useRef(false);
 
-  // Keyboard handlers
+  // ── Keyboard handlers
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       keys.current.add(e.code);
@@ -33,17 +107,108 @@ export default function GamePage() {
     };
   }, []);
 
-  // Ambient sound when playing
+  // ── Landscape lock + fullscreen + rotate warning
+  useEffect(() => {
+    function checkOrientation() {
+      const isPortrait = window.innerWidth < window.innerHeight;
+      setShowRotateWarning(isPortrait);
+    }
+
+    checkOrientation();
+
+    // Orientation change listeners
+    window.addEventListener("orientationchange", checkOrientation);
+    if (screen.orientation) {
+      screen.orientation.addEventListener("change", checkOrientation);
+    }
+    window.addEventListener("resize", checkOrientation);
+
+    return () => {
+      window.removeEventListener("orientationchange", checkOrientation);
+      if (screen.orientation) {
+        screen.orientation.removeEventListener("change", checkOrientation);
+      }
+      window.removeEventListener("resize", checkOrientation);
+
+      // Exit fullscreen on unmount
+      try {
+        if (document.fullscreenElement) {
+          void document.exitFullscreen();
+        }
+      } catch {}
+
+      // Release orientation lock
+      try {
+        (
+          screen.orientation as ScreenOrientation & { unlock?: () => void }
+        ).unlock?.();
+      } catch {}
+    };
+  }, []);
+
+  // ── Request fullscreen + landscape lock when game starts
+  useEffect(() => {
+    if (gamePhase !== "playing") return;
+
+    const el = document.documentElement;
+    try {
+      if (el.requestFullscreen) {
+        void el.requestFullscreen();
+      } else if (
+        (el as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> })
+          .webkitRequestFullscreen
+      ) {
+        void (
+          el as HTMLElement & { webkitRequestFullscreen: () => Promise<void> }
+        ).webkitRequestFullscreen();
+      } else if (
+        (el as HTMLElement & { mozRequestFullScreen?: () => Promise<void> })
+          .mozRequestFullScreen
+      ) {
+        void (
+          el as HTMLElement & { mozRequestFullScreen: () => Promise<void> }
+        ).mozRequestFullScreen();
+      }
+    } catch {}
+
+    try {
+      void (
+        screen.orientation as ScreenOrientation & {
+          lock?: (o: string) => Promise<void>;
+        }
+      ).lock?.("landscape");
+    } catch {}
+  }, [gamePhase]);
+
+  // ── Theme music when playing
   useEffect(() => {
     if (gamePhase === "playing") {
       resumeAudio();
-      ambientStop.current = SFX.startAmbient(volume * 0.3);
+      GameAudio.playTheme();
+      GameAudio.setMasterVolume(volume);
+    } else {
+      GameAudio.stopTheme();
     }
     return () => {
-      ambientStop.current?.();
-      ambientStop.current = null;
+      GameAudio.stopTheme();
     };
   }, [gamePhase, volume]);
+
+  // ── Add to leaderboard on game over
+  useEffect(() => {
+    if (gamePhase === "gameover" && !gameOverHandled.current && score > 0) {
+      gameOverHandled.current = true;
+      const entry = addLeaderboardScore(score, waveCount);
+      setLatestEntry(entry);
+      if (isHighScore(score)) {
+        setTimeout(() => setLeaderboardVisible(true), 1200);
+      }
+    }
+    if (gamePhase === "playing") {
+      gameOverHandled.current = false;
+      setLatestEntry(null);
+    }
+  }, [gamePhase, score, waveCount, setLeaderboardVisible]);
 
   const handleStartGame = useCallback(() => {
     resumeAudio();
@@ -75,6 +240,9 @@ export default function GamePage() {
       style={{ background: "#020503", touchAction: "none" }}
       data-ocid="game-page"
     >
+      {/* Rotate warning — highest z-index */}
+      {showRotateWarning && <RotateWarning />}
+
       {/* 3D Canvas layer */}
       <div className="absolute inset-0">
         <GameCanvas keys={keys} joystick={joystick} />
@@ -143,15 +311,30 @@ export default function GamePage() {
                 </div>
               </motion.div>
 
-              {/* High Score */}
-              <div
-                className="game-hud-bg rounded-xl px-5 py-2.5 text-center"
-                style={{ color: "#f0c040" }}
-              >
-                <div className="text-xs opacity-60">🏆 Sabse Bada Score</div>
-                <div className="text-2xl font-bold">
-                  {getHighScore().toLocaleString()}
+              {/* High Score + Leaderboard trigger */}
+              <div className="flex gap-3 w-full">
+                <div
+                  className="game-hud-bg rounded-xl px-5 py-2.5 text-center flex-1"
+                  style={{ color: "#f0c040" }}
+                >
+                  <div className="text-xs opacity-60">🏆 Best Score</div>
+                  <div className="text-2xl font-bold">
+                    {getHighScore().toLocaleString()}
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setLeaderboardVisible(true)}
+                  className="game-hud-bg rounded-xl px-4 py-2.5 flex flex-col items-center justify-center gap-1 transition-opacity hover:opacity-80"
+                  style={{
+                    color: "#f0c040",
+                    border: "1px solid rgba(240,192,64,0.25)",
+                  }}
+                  data-ocid="leaderboard-btn"
+                >
+                  <Trophy size={18} />
+                  <span className="text-xs opacity-70">Board</span>
+                </button>
               </div>
 
               {/* Photo upload */}
@@ -214,6 +397,22 @@ export default function GamePage() {
                 GAME OVER
               </div>
 
+              {isHighScore(score) && score > 0 && (
+                <motion.div
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.3, type: "spring" }}
+                  className="rounded-xl px-4 py-2 text-sm font-bold text-center"
+                  style={{
+                    background: "rgba(240,192,64,0.2)",
+                    border: "1px solid rgba(240,192,64,0.4)",
+                    color: "#f0c040",
+                  }}
+                >
+                  🏆 Leaderboard mein entry ho gayi!
+                </motion.div>
+              )}
+
               <div className="text-center">
                 <div className="text-xs opacity-60" style={{ color: "#aaa" }}>
                   Aapka Score
@@ -228,7 +427,7 @@ export default function GamePage() {
 
               <div className="text-center">
                 <div className="text-xs opacity-60" style={{ color: "#aaa" }}>
-                  🏆 Sabse Bada Score
+                  🏆 Best Score
                 </div>
                 <div
                   className="text-2xl font-bold"
@@ -249,15 +448,29 @@ export default function GamePage() {
                 <span>❤️ {heroHP} HP bachi</span>
               </div>
 
-              <button
-                type="button"
-                onClick={handleRestart}
-                className="game-cta-gold w-full py-3.5 rounded-xl font-bold flex items-center justify-center gap-2"
-                data-ocid="restart-game-btn"
-              >
-                <RotateCcw size={18} />
-                Fir Se Khelo!
-              </button>
+              <div className="flex gap-3 w-full">
+                <button
+                  type="button"
+                  onClick={handleRestart}
+                  className="game-cta-gold flex-1 py-3.5 rounded-xl font-bold flex items-center justify-center gap-2"
+                  data-ocid="restart-game-btn"
+                >
+                  <RotateCcw size={18} />
+                  Fir Se!
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeaderboardVisible(true)}
+                  className="game-hud-bg py-3.5 px-4 rounded-xl font-bold flex items-center justify-center gap-1.5 transition-opacity hover:opacity-80"
+                  style={{
+                    color: "#f0c040",
+                    border: "1px solid rgba(240,192,64,0.3)",
+                  }}
+                  data-ocid="gameover-leaderboard-btn"
+                >
+                  <Trophy size={16} />
+                </button>
+              </div>
 
               <Link
                 to="/"
@@ -271,7 +484,7 @@ export default function GamePage() {
         )}
       </AnimatePresence>
 
-      {/* ── PLAYING HUD OVERLAY (from GameHUD component) ── */}
+      {/* ── PLAYING HUD OVERLAY ── */}
       <GameHUD />
 
       {/* ── TOUCH CONTROLS (only when playing) ── */}
@@ -284,6 +497,16 @@ export default function GamePage() {
           <AttackButton onAttack={handleAttack} />
         </>
       )}
+
+      {/* ── LEADERBOARD MODAL ── */}
+      <AnimatePresence>
+        {leaderboardVisible && (
+          <Leaderboard
+            onClose={() => setLeaderboardVisible(false)}
+            latestEntry={latestEntry}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { Home, Play, RotateCcw } from "lucide-react";
+import { Home, Play, RotateCcw, Trophy } from "lucide-react";
 import { motion } from "motion/react";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "../../lib/router";
@@ -8,7 +8,7 @@ import { setMasterVolume } from "../utils/audioEngine";
 const VOLUME_KEY = "dz_game_volume";
 
 export default function PauseMenu() {
-  const { setGamePhase, resetGame } = useGameStore();
+  const { setGamePhase, resetGame, setLeaderboardVisible } = useGameStore();
   const [volume, setVolume] = useState(() => {
     const saved = localStorage.getItem(VOLUME_KEY);
     return saved ? Number(saved) : 70;
@@ -35,6 +35,10 @@ export default function PauseMenu() {
   const handleRestart = useCallback(() => {
     resetGame();
   }, [resetGame]);
+
+  const handleLeaderboard = useCallback(() => {
+    setLeaderboardVisible(true);
+  }, [setLeaderboardVisible]);
 
   return (
     <motion.div
@@ -109,12 +113,26 @@ export default function PauseMenu() {
 
         <button
           type="button"
+          onClick={handleLeaderboard}
+          className="w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
+          style={{
+            border: "1px solid rgba(240,192,64,0.35)",
+            color: "#f0c040",
+            background: "rgba(240,192,64,0.06)",
+          }}
+          data-ocid="pause-leaderboard-btn"
+        >
+          <Trophy size={16} />🏆 Leaderboard
+        </button>
+
+        <button
+          type="button"
           onClick={handleRestart}
           className="w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
           style={{
-            border: "1px solid rgba(240,192,64,0.4)",
-            color: "#f0c040",
-            background: "rgba(240,192,64,0.06)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            color: "#aaa",
+            background: "rgba(255,255,255,0.04)",
           }}
           data-ocid="pause-restart-btn"
         >

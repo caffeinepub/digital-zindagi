@@ -1,7 +1,7 @@
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-import { useGameStore } from "../stores/gameStore";
+import { type WeaponType, useGameStore } from "../stores/gameStore";
 import { SFX } from "../utils/audioEngine";
 import { createFaceTexture } from "../utils/faceTexture";
 
@@ -11,9 +11,24 @@ interface HeroProps {
   joystick: React.MutableRefObject<{ x: number; y: number }>;
 }
 
+/** Per-weapon attack cooldown in seconds */
+const WEAPON_COOLDOWN: Record<WeaponType, number> = {
+  rifle: 1.2,
+  shotgun: 2.0,
+  plasma: 1.5,
+};
+
+/** Per-weapon damage multiplier */
+const WEAPON_DAMAGE: Record<WeaponType, number> = {
+  rifle: 20,
+  shotgun: 30,
+  plasma: 25,
+};
+
 export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
-  const { heroHP, heroMaxHP, heroFace } = useGameStore();
+  const { heroHP, heroMaxHP, heroFace, currentWeapon } = useGameStore();
   const groupRef = useRef<THREE.Group>(null);
+  const weaponGroupRef = useRef<THREE.Group>(null);
   const weaponRef = useRef<THREE.Mesh>(null);
   const velocity = useRef(new THREE.Vector3());
   const position = useRef(new THREE.Vector3(0, 0, 3));
@@ -76,13 +91,19 @@ export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
       groupRef.current.rotation.y = angle;
     }
 
-    // Attack key (Space)
+    // Attack key (Space) — weapon-specific cooldown
+    const weapon = store.currentWeapon;
+    const cd = WEAPON_COOLDOWN[weapon];
     attackCooldown.current -= delta;
     if (ks.has("Space") && attackCooldown.current <= 0) {
       isAttacking.current = true;
-      attackCooldown.current = 2.0;
+      attackCooldown.current = cd;
       attackTime.current = 0;
       SFX.heroAttack(store.volume);
+      // Notify HUD cooldown bar
+      window.dispatchEvent(new Event("dz_hero_attack"));
+      // Store damage in localStorage for GameScene enemy system to read
+      localStorage.setItem("dz_weapon_dmg", String(WEAPON_DAMAGE[weapon]));
     }
 
     // Attack animation
@@ -128,41 +149,104 @@ export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
         <boxGeometry args={[0.5, 0.4, 0.08]} />
         <meshStandardMaterial color="#0d3018" metalness={0.5} roughness={0.5} />
       </mesh>
-      {/* Weapon — emerald glowing staff */}
-      <group ref={weaponRef} position={[0.4, 1.2, 0]}>
-        <mesh rotation={[0, 0, 0.3]} castShadow>
-          <cylinderGeometry args={[0.04, 0.04, 1.4, 8]} />
-          <meshStandardMaterial
-            color="#1a5a30"
-            metalness={0.7}
-            roughness={0.3}
-          />
-        </mesh>
-        {/* Staff tip glow */}
-        <mesh position={[0.35, 0.7, 0]}>
-          <sphereGeometry args={[0.1, 8, 8]} />
-          <meshStandardMaterial
-            color="#00ff88"
-            emissive="#00ff88"
-            emissiveIntensity={3}
-          />
-        </mesh>
-        <pointLight
-          position={[0.35, 0.7, 0]}
-          color="#00ff88"
-          intensity={1.5}
-          distance={4}
-        />
+
+      {/* ── Weapon (changes based on currentWeapon) ── */}
+      <group ref={weaponGroupRef} position={[0.4, 1.2, 0]}>
+        {currentWeapon === "rifle" && (
+          <mesh ref={weaponRef} castShadow rotation={[0, 0, 0.3]}>
+            <boxGeometry args={[0.08, 0.08, 0.7]} />
+            <meshStandardMaterial
+              color="#2a2a2a"
+              metalness={0.85}
+              roughness={0.2}
+            />
+          </mesh>
+        )}
+
+        {currentWeapon === "shotgun" && (
+          <group ref={weaponRef}>
+            {/* Barrel */}
+            <mesh castShadow rotation={[0, 0, 0.25]}>
+              <boxGeometry args={[0.12, 0.12, 0.5]} />
+              <meshStandardMaterial
+                color="#3a2010"
+                metalness={0.6}
+                roughness={0.4}
+              />
+            </mesh>
+            {/* Pump handle */}
+            <mesh position={[0, -0.1, 0.05]} castShadow>
+              <boxGeometry args={[0.08, 0.06, 0.18]} />
+              <meshStandardMaterial
+                color="#5a3020"
+                metalness={0.3}
+                roughness={0.7}
+              />
+            </mesh>
+          </group>
+        )}
+
+        {currentWeapon === "plasma" && (
+          <group ref={weaponRef}>
+            {/* Orb body */}
+            <mesh castShadow>
+              <sphereGeometry args={[0.15, 12, 12]} />
+              <meshStandardMaterial
+                color="#001a33"
+                metalness={0.9}
+                roughness={0.1}
+                emissive="#0088cc"
+                emissiveIntensity={1.5}
+              />
+            </mesh>
+            {/* Energy core */}
+            <mesh>
+              <sphereGeometry args={[0.08, 8, 8]} />
+              <meshStandardMaterial
+                color="#00c8ff"
+                emissive="#00c8ff"
+                emissiveIntensity={4}
+              />
+            </mesh>
+            <pointLight color="#00c8ff" intensity={2} distance={5} />
+          </group>
+        )}
+
+        {/* Legacy staff tip glow (default fallback for undefined weapon states) */}
+        {!["rifle", "shotgun", "plasma"].includes(currentWeapon) && (
+          <>
+            <mesh rotation={[0, 0, 0.3]} castShadow ref={weaponRef}>
+              <cylinderGeometry args={[0.04, 0.04, 1.4, 8]} />
+              <meshStandardMaterial
+                color="#1a5a30"
+                metalness={0.7}
+                roughness={0.3}
+              />
+            </mesh>
+            <mesh position={[0.35, 0.7, 0]}>
+              <sphereGeometry args={[0.1, 8, 8]} />
+              <meshStandardMaterial
+                color="#00ff88"
+                emissive="#00ff88"
+                emissiveIntensity={3}
+              />
+            </mesh>
+            <pointLight
+              position={[0.35, 0.7, 0]}
+              color="#00ff88"
+              intensity={1.5}
+              distance={4}
+            />
+          </>
+        )}
       </group>
 
       {/* HP bar (3D plane above head) */}
       <group position={[0, 2.5, 0]}>
-        {/* Background */}
         <mesh>
           <planeGeometry args={[0.8, 0.1]} />
           <meshBasicMaterial color="#330000" />
         </mesh>
-        {/* Fill */}
         <mesh position={[(hpFraction - 1) * 0.4, 0, 0.001]}>
           <planeGeometry args={[0.8 * hpFraction, 0.08]} />
           <meshBasicMaterial
