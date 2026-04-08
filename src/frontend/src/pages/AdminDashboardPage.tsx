@@ -1727,6 +1727,7 @@ function CategoryManagerSection() {
     setCategories((prev) => {
       const updated = prev.filter((c) => c.name !== catName);
       persistCategories(updated);
+      broadcastSettingsChange();
       return updated;
     });
     toast.success(`"${catName}" category remove ho gayi!`);
@@ -1744,6 +1745,7 @@ function CategoryManagerSection() {
           : c,
       );
       persistCategories(updated);
+      broadcastSettingsChange();
       return updated;
     });
     toast.success("Category update ho gayi!");
@@ -1805,6 +1807,7 @@ function CategoryManagerSection() {
       };
       const updated = [...prev, newCat];
       persistCategories(updated);
+      broadcastSettingsChange();
       return updated;
     });
     setShowSaved(true);
