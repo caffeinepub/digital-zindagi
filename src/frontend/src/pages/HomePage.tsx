@@ -9,7 +9,7 @@ import {
   Youtube,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import CategoryGrid, { ALL_CATEGORIES } from "../components/CategoryGrid";
 import Footer from "../components/Footer";
@@ -428,6 +428,111 @@ function EbookBuyModal({
   );
 }
 
+interface CustomCodeEntry {
+  id: string;
+  label: string;
+  code: string;
+  placement: "top" | "middle" | "bottom";
+  enabled: boolean;
+  createdAt: number;
+}
+
+interface AdPlacementsSettings {
+  header: boolean;
+  middle: boolean;
+  footer: boolean;
+}
+
+function readCustomCodes(): CustomCodeEntry[] {
+  try {
+    return JSON.parse(localStorage.getItem("dz_custom_codes") ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function readAdPlacements(): AdPlacementsSettings {
+  try {
+    return JSON.parse(
+      localStorage.getItem("dz_ad_placements") ??
+        '{"header":false,"middle":true,"footer":false}',
+    );
+  } catch {
+    return { header: false, middle: true, footer: false };
+  }
+}
+
+function CustomCodeBlock({ entry }: { entry: CustomCodeEntry }) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (!ref.current) return;
+    // Extract and execute any <script> tags inside custom code
+    const scripts = ref.current.querySelectorAll("script");
+    for (const oldScript of Array.from(scripts)) {
+      const newScript = document.createElement("script");
+      if ((oldScript as HTMLScriptElement).src)
+        newScript.src = (oldScript as HTMLScriptElement).src;
+      else newScript.textContent = oldScript.textContent;
+      document.body.appendChild(newScript);
+      oldScript.remove();
+    }
+  }, []);
+  return (
+    <div
+      ref={ref}
+      className="custom-code-block w-full"
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: admin-controlled code
+      dangerouslySetInnerHTML={{ __html: entry.code }}
+    />
+  );
+}
+
+function AdBanners({ position }: { position: "header" | "middle" | "footer" }) {
+  const adsEnabled =
+    localStorage.getItem("dz_admob_config") !== null
+      ? (() => {
+          try {
+            return (
+              JSON.parse(localStorage.getItem("dz_admob_config") ?? "{}")
+                .masterEnabled !== false
+            );
+          } catch {
+            return true;
+          }
+        })()
+      : true;
+  if (!adsEnabled) return null;
+
+  const placements = readAdPlacements();
+  if (!placements[position]) return null;
+
+  const customAds: string[] = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("dz_custom_internal_ads") ?? "[]");
+    } catch {
+      return [];
+    }
+  })();
+
+  if (customAds.length === 0) return null;
+
+  // Show a random custom ad
+  const ad = customAds[Math.floor(Math.random() * customAds.length)];
+  return (
+    <div className="w-full px-4 py-2 max-w-7xl mx-auto">
+      <img
+        src={ad}
+        alt="Advertisement"
+        className="w-full rounded-xl object-cover max-h-24"
+        loading="lazy"
+        onError={(e) => {
+          (e.currentTarget as HTMLImageElement).style.display = "none";
+        }}
+      />
+    </div>
+  );
+}
+
 // WhatsApp icon as SVG since lucide doesn't have it
 function WhatsAppIcon({ size = 22 }: { size?: number }) {
   return (
@@ -602,6 +707,8 @@ export default function HomePage() {
     useState(readHomepageSettings);
 
   const [sectionToggles, setSectionToggles] = useState(readHomeSectionToggles);
+  const [customCodes, setCustomCodes] =
+    useState<CustomCodeEntry[]>(readCustomCodes);
 
   const reloadSettings = useCallback(() => {
     setSocialSettings(readSocialSettings());
@@ -609,6 +716,7 @@ export default function HomePage() {
     setEbooks(readEbooksHome());
     setHomepageSettings(readHomepageSettings());
     setSectionToggles(readHomeSectionToggles());
+    setCustomCodes(readCustomCodes());
   }, []);
 
   // Re-read settings on focus (in case admin changed them)
@@ -757,6 +865,16 @@ export default function HomePage() {
       <Header />
 
       <main className="flex-1">
+        {/* Custom Code — TOP placement (before hero) */}
+        {customCodes
+          .filter((c) => c.enabled && c.placement === "top")
+          .map((entry) => (
+            <CustomCodeBlock key={entry.id} entry={entry} />
+          ))}
+
+        {/* Ad Banner — Header position */}
+        <AdBanners position="header" />
+
         {/* Hero Section */}
         {homepageSettings.showHeroCarousel && (
           <section className="bg-emerald-hero px-4 py-4 overflow-hidden w-full">
@@ -1111,6 +1229,16 @@ export default function HomePage() {
           </section>
         )}
 
+        {/* Custom Code — MIDDLE placement (after CategoryGrid, before providers) */}
+        {customCodes
+          .filter((c) => c.enabled && c.placement === "middle")
+          .map((entry) => (
+            <CustomCodeBlock key={entry.id} entry={entry} />
+          ))}
+
+        {/* Ad Banner — Middle position */}
+        <AdBanners position="middle" />
+
         {homepageSettings.showProviders && (
           <section className="max-w-7xl mx-auto px-4 py-8 border-t border-border">
             <motion.div
@@ -1322,6 +1450,16 @@ export default function HomePage() {
           </section>
         )}
       </main>
+
+      {/* Custom Code — BOTTOM placement (before Footer) */}
+      {customCodes
+        .filter((c) => c.enabled && c.placement === "bottom")
+        .map((entry) => (
+          <CustomCodeBlock key={entry.id} entry={entry} />
+        ))}
+
+      {/* Ad Banner — Footer position */}
+      <AdBanners position="footer" />
 
       <Footer />
     </div>
