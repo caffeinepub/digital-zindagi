@@ -1,6 +1,8 @@
 import { Play, Youtube } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+import { useVideos } from "../hooks/useQueries";
+import type { VideoItem } from "../types/appTypes";
 import type { SheetRow } from "../utils/googleSheetsSync";
 import { getSheetData } from "../utils/googleSheetsSync";
 import InterstitialAd from "./InterstitialAd";
@@ -21,7 +23,6 @@ function readSectionTogglesVG(): Record<string, boolean> {
 }
 
 function checkAdFrequency(): boolean {
-  // Returns true if ads can be shown (interval has passed)
   const intervalHours = Number(
     localStorage.getItem("dz_ad_interval_hours") ?? "4",
   );
@@ -44,7 +45,39 @@ function getPlatformKey(platform: string): Platform {
   return "all";
 }
 
-function getVideoThumbnail(row: SheetRow): string | null {
+// Unified video row — wraps both SheetRow and VideoItem
+interface UnifiedRow {
+  id: string;
+  videoLink: string;
+  platform: string;
+  category: string;
+  title: string;
+  thumbnailUrl?: string;
+}
+
+function sheetToUnified(row: SheetRow): UnifiedRow {
+  return {
+    id: row.id,
+    videoLink: row.videoLink,
+    platform: row.platform ?? "",
+    category: row.category ?? "",
+    title: row.category ?? "",
+  };
+}
+
+function canisterToUnified(v: VideoItem): UnifiedRow {
+  return {
+    id: `c_${v.id}`,
+    videoLink: v.videoUrl,
+    platform: v.platform,
+    category: v.category,
+    title: v.title,
+    thumbnailUrl: v.thumbnailUrl || undefined,
+  };
+}
+
+function getVideoThumbnail(row: UnifiedRow): string | null {
+  if (row.thumbnailUrl) return row.thumbnailUrl;
   const url = row.videoLink;
   if (!url) return null;
   const ytMatch = url.match(
@@ -52,12 +85,6 @@ function getVideoThumbnail(row: SheetRow): string | null {
   );
   if (ytMatch && (url.includes("youtube") || url.includes("youtu.be"))) {
     return `https://img.youtube.com/vi/${ytMatch[1]}/mqdefault.jpg`;
-  }
-  if (url.includes("facebook.com") || url.includes("fb.watch")) {
-    return null; // Facebook thumbnails require API auth
-  }
-  if (url.includes("instagram.com")) {
-    return null;
   }
   return null;
 }
@@ -112,7 +139,7 @@ function getPlatformIcon(platform: string) {
       </span>
     );
   }
-  return <Youtube size={14} className="text-gray-400" />;
+  return <Youtube size={14} className="text-muted-foreground" />;
 }
 
 function getAdMobConfig() {
@@ -133,7 +160,6 @@ function getCustomInternalAds(): string[] {
   }
 }
 
-// Detect AdBlock
 async function detectAdBlock(): Promise<boolean> {
   try {
     await fetch(
@@ -146,52 +172,78 @@ async function detectAdBlock(): Promise<boolean> {
   }
 }
 
+function buildUnifiedRows(
+  canisterVideos: VideoItem[] | undefined,
+  sheetRows: UnifiedRow[],
+): UnifiedRow[] {
+  const canisterRows = (canisterVideos ?? [])
+    .filter((v) => v.enabled)
+    .map(canisterToUnified);
+  const seen = new Set<string>();
+  const result: UnifiedRow[] = [];
+  for (const row of [...canisterRows, ...sheetRows]) {
+    if (!seen.has(row.videoLink)) {
+      seen.add(row.videoLink);
+      result.push(row);
+    }
+  }
+  return result;
+}
+
+// Ad gate states for strict pre/post-roll enforcement
+type AdGateState =
+  | "idle" // No ad, no video — normal gallery view
+  | "pre_ad" // Pre-roll ad showing; video player blocked
+  | "playing" // Video player open
+  | "post_ad"; // Post-roll ad showing; video selection blocked
+
 export default function VideoGallery() {
-  const [allRows, setAllRows] = useState<SheetRow[]>([]);
+  const [sheetRows, setSheetRows] = useState<UnifiedRow[]>([]);
   const [activePlatform, setActivePlatform] = useState<Platform>("all");
   const [activeCategory, setActiveCategory] = useState<string>("all");
-  const [playingVideo, setPlayingVideo] = useState<SheetRow | null>(null);
-  const [showInterstitial, setShowInterstitial] = useState(false);
-  const [interstitialPhase, setInterstitialPhase] = useState<"pre" | "post">(
-    "pre",
-  );
-  const [pendingVideo, setPendingVideo] = useState<SheetRow | null>(null);
+  const [adGate, setAdGate] = useState<AdGateState>("idle");
+  const [currentVideo, setCurrentVideo] = useState<UnifiedRow | null>(null);
   const [adBlocked, setAdBlocked] = useState(false);
   const [showAdBlockPopup, setShowAdBlockPopup] = useState(false);
   const [customAds, setCustomAds] = useState<string[]>([]);
   const adMobConfig = useRef(getAdMobConfig());
   const adCheckDone = useRef(false);
 
+  // Poll canister videos every 2 seconds
+  const { data: canisterVideos } = useVideos();
+
   useEffect(() => {
     const filterRows = () => {
       const st = readSectionTogglesVG();
-      return getSheetData().filter((r) => {
-        if (!r.videoLink || r.status === "inactive") return false;
-        const p = (r.platform ?? "").toLowerCase();
-        if ((p === "youtube" || p === "yt") && !st.dz_section_youtube)
-          return false;
-        if ((p === "facebook" || p === "fb") && !st.dz_section_facebook)
-          return false;
-        if ((p === "instagram" || p === "ig") && !st.dz_section_instagram)
-          return false;
-        return true;
-      });
+      return getSheetData()
+        .filter((r) => {
+          if (!r.videoLink || r.status === "inactive") return false;
+          const p = (r.platform ?? "").toLowerCase();
+          if ((p === "youtube" || p === "yt") && !st.dz_section_youtube)
+            return false;
+          if ((p === "facebook" || p === "fb") && !st.dz_section_facebook)
+            return false;
+          if ((p === "instagram" || p === "ig") && !st.dz_section_instagram)
+            return false;
+          return true;
+        })
+        .map(sheetToUnified);
     };
-    const rows = filterRows();
-    setAllRows(rows);
+    setSheetRows(filterRows());
     setCustomAds(getCustomInternalAds());
 
     const handleStorage = () => {
-      const updated = filterRows();
-      setAllRows(updated);
+      setSheetRows(filterRows());
       adMobConfig.current = getAdMobConfig();
       setCustomAds(getCustomInternalAds());
     };
     window.addEventListener("storage", handleStorage);
     window.addEventListener("focus", handleStorage);
+    window.addEventListener("dz-settings-changed", handleStorage);
     return () => {
       window.removeEventListener("storage", handleStorage);
       window.removeEventListener("focus", handleStorage);
+      window.removeEventListener("dz-settings-changed", handleStorage);
     };
   }, []);
 
@@ -202,17 +254,32 @@ export default function VideoGallery() {
     detectAdBlock().then((blocked) => setAdBlocked(blocked));
   }, []);
 
+  // Merge canister + sheet rows, deduplicated
+  const allRows = buildUnifiedRows(canisterVideos, sheetRows);
+
+  // Apply platform section toggles
+  const st = readSectionTogglesVG();
+  const filteredByToggle = allRows.filter((r) => {
+    const p = getPlatformKey(r.platform);
+    if (p === "youtube" && !st.dz_section_youtube) return false;
+    if (p === "facebook" && !st.dz_section_facebook) return false;
+    if (p === "instagram" && !st.dz_section_instagram) return false;
+    return true;
+  });
+
   // Platform filter
   const platformFiltered =
     activePlatform === "all"
-      ? allRows
-      : allRows.filter((r) => getPlatformKey(r.platform) === activePlatform);
+      ? filteredByToggle
+      : filteredByToggle.filter(
+          (r) => getPlatformKey(r.platform) === activePlatform,
+        );
 
   // Category filter
   const categories = [
     "all",
     ...Array.from(
-      new Set(allRows.map((r) => r.category?.trim()).filter(Boolean)),
+      new Set(filteredByToggle.map((r) => r.category?.trim()).filter(Boolean)),
     ),
   ];
 
@@ -229,56 +296,69 @@ export default function VideoGallery() {
     adMobConfig.current.interstitialEnabled;
   const interstitialId = adMobConfig.current.interstitialId;
 
-  const handlePlayClick = async (row: SheetRow) => {
-    // Check adblock
+  // Determine whether an ad should be shown at all (frequency throttle applies)
+  const shouldShowAd = (): boolean => {
+    if (!isAdMobEnabled) return false;
+    // Even if no AdMob ID, show fallback if adBlocked (custom ads or branded placeholder)
+    return checkAdFrequency();
+  };
+
+  const handlePlayClick = async (row: UnifiedRow) => {
     const blocked = await detectAdBlock();
     setAdBlocked(blocked);
 
+    // If AdBlock detected and AdMob is enabled, use custom ads bypass
     if (blocked && isAdMobEnabled) {
-      // If adblocked + admob enabled → show custom internal ad or popup
       if (customAds.length > 0) {
-        // Bypass: show custom internal ad instead
-        setPendingVideo(row);
-        setInterstitialPhase("pre");
-        setShowInterstitial(true);
+        // Show interstitial with custom ads (no bypass possible — ad gate)
+        markAdShown();
+        setCurrentVideo(row);
+        setAdGate("pre_ad");
       } else {
+        // No custom ads available — inform user and still require them to acknowledge
+        setCurrentVideo(row);
         setShowAdBlockPopup(true);
       }
       return;
     }
 
-    if (isAdMobEnabled && interstitialId && checkAdFrequency()) {
-      // Show pre-video interstitial (frequency-controlled)
+    if (isAdMobEnabled && shouldShowAd()) {
+      // Pre-roll ad gate: block video until ad countdown completes
       markAdShown();
-      setPendingVideo(row);
-      setInterstitialPhase("pre");
-      setShowInterstitial(true);
+      setCurrentVideo(row);
+      setAdGate("pre_ad");
     } else {
-      setPlayingVideo(row);
+      // Ad frequency throttle active (window not expired) — go straight to video
+      setCurrentVideo(row);
+      setAdGate("playing");
     }
   };
 
+  // Called when interstitial ad countdown completes and user taps skip
   const handleInterstitialClose = () => {
-    setShowInterstitial(false);
-    if (interstitialPhase === "pre" && pendingVideo) {
-      setPlayingVideo(pendingVideo);
-    } else {
-      setPendingVideo(null);
+    if (adGate === "pre_ad") {
+      // Pre-roll done — open video player
+      setAdGate("playing");
+    } else if (adGate === "post_ad") {
+      // Post-roll done — reset everything, allow next video selection
+      setAdGate("idle");
+      setCurrentVideo(null);
     }
   };
 
+  // Called when VideoPlayer is closed by user (X button)
   const handleVideoClose = () => {
-    const closedVideo = playingVideo;
-    setPlayingVideo(null);
-    if (isAdMobEnabled && interstitialId && closedVideo) {
-      // Show post-video interstitial
-      setPendingVideo(closedVideo);
-      setInterstitialPhase("post");
-      setShowInterstitial(true);
+    if (isAdMobEnabled && interstitialId && currentVideo) {
+      // Show post-roll ad before allowing next video
+      setAdGate("post_ad");
+    } else {
+      // No post-roll configured — reset immediately
+      setAdGate("idle");
+      setCurrentVideo(null);
     }
   };
 
-  if (allRows.length === 0) return null;
+  if (filteredByToggle.length === 0) return null;
 
   const platformTabs: { key: Platform; label: string }[] = [
     { key: "all", label: "सभी" },
@@ -321,7 +401,7 @@ export default function VideoGallery() {
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all ${
                   activePlatform === tab.key
                     ? "bg-primary text-primary-foreground shadow-md"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
                 }`}
               >
                 {tab.key !== "all" && getPlatformIcon(tab.key)}
@@ -343,8 +423,8 @@ export default function VideoGallery() {
                   onClick={() => setActiveCategory(cat)}
                   className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all border ${
                     activeCategory === cat
-                      ? "bg-emerald-600 text-white border-emerald-600"
-                      : "bg-white text-gray-600 border-gray-200 hover:border-emerald-400 hover:text-emerald-700"
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-card text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
                   }`}
                 >
                   {cat === "all" ? "सभी Categories" : cat}
@@ -363,15 +443,21 @@ export default function VideoGallery() {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {filtered.map((row) => {
                 const thumb = getVideoThumbnail(row);
+                // Block clicks while post-roll ad is pending
+                const isLocked = adGate === "post_ad" || adGate === "pre_ad";
                 return (
                   <motion.div
                     key={row.id}
                     initial={{ opacity: 0, scale: 0.96 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.25 }}
-                    className="relative group rounded-2xl overflow-hidden bg-gray-900 shadow-md cursor-pointer"
+                    className={`relative group rounded-2xl overflow-hidden bg-card shadow-md ${
+                      isLocked
+                        ? "opacity-50 pointer-events-none"
+                        : "cursor-pointer"
+                    }`}
                     style={{ aspectRatio: "16/9" }}
-                    onClick={() => handlePlayClick(row)}
+                    onClick={() => !isLocked && handlePlayClick(row)}
                   >
                     {thumb ? (
                       <img
@@ -381,7 +467,7 @@ export default function VideoGallery() {
                         loading="lazy"
                       />
                     ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-700 flex items-center justify-center">
+                      <div className="w-full h-full bg-gradient-to-br from-muted to-card flex items-center justify-center">
                         {getPlatformIcon(row.platform)}
                       </div>
                     )}
@@ -391,7 +477,7 @@ export default function VideoGallery() {
                       <div className="w-12 h-12 bg-white/90 rounded-full flex items-center justify-center shadow-lg">
                         <Play
                           size={22}
-                          className="text-gray-900 ml-1"
+                          className="text-foreground ml-1"
                           fill="currentColor"
                         />
                       </div>
@@ -427,15 +513,15 @@ export default function VideoGallery() {
         </motion.div>
       </section>
 
-      {/* AdBlock Popup */}
+      {/* AdBlock Popup — user must acknowledge before video plays */}
       {showAdBlockPopup && (
         <div className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center px-4">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl">
+          <div className="bg-card rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl">
             <div className="text-5xl mb-3">🚫</div>
-            <h3 className="font-bold text-lg text-gray-900 mb-2">
+            <h3 className="font-bold text-lg text-foreground mb-2">
               AdBlocker Detected!
             </h3>
-            <p className="text-sm text-gray-600 mb-4">
+            <p className="text-sm text-muted-foreground mb-4">
               Please disable your AdBlocker to watch this video. Yeh app free
               content ke liye ads par depend karta hai.
             </p>
@@ -444,10 +530,10 @@ export default function VideoGallery() {
                 type="button"
                 onClick={() => {
                   setShowAdBlockPopup(false);
-                  setPlayingVideo(pendingVideo);
-                  setPendingVideo(null);
+                  // Still go through ad gate (branded placeholder) — no direct bypass
+                  setAdGate("pre_ad");
                 }}
-                className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+                className="flex-1 py-2.5 border border-border rounded-xl text-sm text-muted-foreground hover:bg-muted"
               >
                 Phir Bhi Dekho
               </button>
@@ -463,21 +549,22 @@ export default function VideoGallery() {
         </div>
       )}
 
-      {/* Interstitial Ad */}
-      {showInterstitial && (
+      {/* Interstitial Ad — pre-roll (adGate === "pre_ad") OR post-roll (adGate === "post_ad") */}
+      {(adGate === "pre_ad" || adGate === "post_ad") && (
         <InterstitialAd
-          phase={interstitialPhase}
+          phase={adGate === "pre_ad" ? "pre" : "post"}
           adBlocked={adBlocked}
           customAds={customAds}
           onClose={handleInterstitialClose}
         />
       )}
 
-      {/* Video Player */}
-      {playingVideo && (
+      {/* Video Player — ONLY renders when adGate === "playing", never during ad gate */}
+      {adGate === "playing" && currentVideo && (
         <VideoPlayer
-          url={playingVideo.videoLink}
-          title={playingVideo.category || "Video"}
+          url={currentVideo.videoLink}
+          title={currentVideo.title || currentVideo.category || "Video"}
+          autoplay={true}
           onClose={handleVideoClose}
         />
       )}
