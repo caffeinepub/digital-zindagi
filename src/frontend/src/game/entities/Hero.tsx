@@ -11,19 +11,28 @@ interface HeroProps {
   joystick: React.MutableRefObject<{ x: number; y: number }>;
 }
 
-/** Per-weapon attack cooldown in seconds */
+/** Per-weapon attack cooldown in seconds — rifle fast, shotgun medium, plasma slow */
 const WEAPON_COOLDOWN: Record<WeaponType, number> = {
-  rifle: 1.2,
-  shotgun: 2.0,
-  plasma: 1.5,
+  rifle: 0.4,
+  shotgun: 0.7,
+  plasma: 1.2,
 };
 
-/** Per-weapon damage multiplier */
+/** Per-weapon base damage */
 const WEAPON_DAMAGE: Record<WeaponType, number> = {
   rifle: 20,
   shotgun: 30,
-  plasma: 25,
+  plasma: 45,
 };
+
+/** Read damage multiplier from localStorage (set by damage_boost upgrade) */
+function getDamageMultiplier(): number {
+  try {
+    const until = Number(localStorage.getItem("dz_damage_boost_until") || "0");
+    if (Date.now() < until) return 1.5;
+  } catch {}
+  return 1.0;
+}
 
 export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
   const { heroHP, heroMaxHP, heroFace, currentWeapon } = useGameStore();
@@ -39,7 +48,7 @@ export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
   const isAttacking = useRef(false);
   const attackTime = useRef(0);
 
-  // Load face texture
+  // Load face texture whenever heroFace changes
   useEffect(() => {
     if (heroFace) {
       createFaceTexture(heroFace, (tex) => setFaceTexture(tex));
@@ -91,10 +100,11 @@ export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
       groupRef.current.rotation.y = angle;
     }
 
-    // Attack key (Space) — weapon-specific cooldown
+    // Attack (Space) — weapon-specific cooldown
     const weapon = store.currentWeapon;
     const cd = WEAPON_COOLDOWN[weapon];
     attackCooldown.current -= delta;
+
     if (ks.has("Space") && attackCooldown.current <= 0) {
       isAttacking.current = true;
       attackCooldown.current = cd;
@@ -102,8 +112,9 @@ export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
       SFX.heroAttack(store.volume);
       // Notify HUD cooldown bar
       window.dispatchEvent(new Event("dz_hero_attack"));
-      // Store damage in localStorage for GameScene enemy system to read
-      localStorage.setItem("dz_weapon_dmg", String(WEAPON_DAMAGE[weapon]));
+      // Store damage (with boost multiplier) for GameScene enemy system
+      const dmg = Math.round(WEAPON_DAMAGE[weapon] * getDamageMultiplier());
+      localStorage.setItem("dz_weapon_dmg", String(dmg));
     }
 
     // Attack animation
@@ -130,7 +141,8 @@ export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
         <capsuleGeometry args={[0.3, 1.0, 8, 16]} />
         <meshStandardMaterial color="#1a4a2a" roughness={0.7} metalness={0.2} />
       </mesh>
-      {/* Head */}
+
+      {/* Head — uses face texture if available, DZ fallback otherwise */}
       <mesh position={[0, 1.85, 0]} castShadow>
         <sphereGeometry args={[0.28, 16, 16]} />
         <meshStandardMaterial
@@ -139,15 +151,27 @@ export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
           roughness={0.6}
         />
       </mesh>
+
       {/* Helmet rim */}
       <mesh position={[0, 1.95, 0]}>
         <torusGeometry args={[0.29, 0.04, 8, 16]} />
         <meshStandardMaterial color="#1a4a1a" metalness={0.6} roughness={0.4} />
       </mesh>
-      {/* Armor plates */}
+
+      {/* Armor chest plate */}
       <mesh position={[0, 1.1, 0.28]} castShadow>
         <boxGeometry args={[0.5, 0.4, 0.08]} />
         <meshStandardMaterial color="#0d3018" metalness={0.5} roughness={0.5} />
+      </mesh>
+
+      {/* Shoulder pads */}
+      <mesh position={[-0.38, 1.3, 0]} castShadow>
+        <boxGeometry args={[0.16, 0.14, 0.22]} />
+        <meshStandardMaterial color="#0f3822" metalness={0.4} roughness={0.6} />
+      </mesh>
+      <mesh position={[0.38, 1.3, 0]} castShadow>
+        <boxGeometry args={[0.16, 0.14, 0.22]} />
+        <meshStandardMaterial color="#0f3822" metalness={0.4} roughness={0.6} />
       </mesh>
 
       {/* ── Weapon (changes based on currentWeapon) ── */}
@@ -165,7 +189,6 @@ export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
 
         {currentWeapon === "shotgun" && (
           <group ref={weaponRef}>
-            {/* Barrel */}
             <mesh castShadow rotation={[0, 0, 0.25]}>
               <boxGeometry args={[0.12, 0.12, 0.5]} />
               <meshStandardMaterial
@@ -174,7 +197,6 @@ export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
                 roughness={0.4}
               />
             </mesh>
-            {/* Pump handle */}
             <mesh position={[0, -0.1, 0.05]} castShadow>
               <boxGeometry args={[0.08, 0.06, 0.18]} />
               <meshStandardMaterial
@@ -212,7 +234,7 @@ export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
           </group>
         )}
 
-        {/* Legacy staff tip glow (default fallback for undefined weapon states) */}
+        {/* Fallback */}
         {!["rifle", "shotgun", "plasma"].includes(currentWeapon) && (
           <>
             <mesh rotation={[0, 0, 0.3]} castShadow ref={weaponRef}>

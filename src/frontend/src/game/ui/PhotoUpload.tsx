@@ -1,4 +1,4 @@
-import { Camera, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Camera, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { useGameStore } from "../stores/gameStore";
 
@@ -24,16 +24,27 @@ export default function PhotoUpload() {
       const img = new Image();
       const url = URL.createObjectURL(file);
       img.onload = () => {
+        // Create 128x128 circular-cropped canvas
         const canvas = document.createElement("canvas");
         canvas.width = 128;
         canvas.height = 128;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
+
+        // Circular clip
+        ctx.beginPath();
+        ctx.arc(64, 64, 64, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.clip();
+
+        // Center-crop to square (focus top for face)
         const size = Math.min(img.width, img.height);
         const sx = (img.width - size) / 2;
-        const sy = (img.height - size) / 2;
+        // Slight top bias for face focus
+        const sy = Math.min(img.height * 0.05, img.height - size);
         ctx.drawImage(img, sx, sy, size, size, 0, 0, 128, 128);
-        const base64 = canvas.toDataURL("image/jpeg", 0.85);
+
+        const base64 = canvas.toDataURL("image/jpeg", 0.88);
         localStorage.setItem(STORAGE_KEY, base64);
         setHeroFace(base64);
         URL.revokeObjectURL(url);
@@ -65,8 +76,8 @@ export default function PhotoUpload() {
 
       {heroFace ? (
         <div className="flex flex-col items-center gap-3 w-full">
-          {/* Circular face preview */}
-          <div className="relative flex flex-col items-center gap-1.5">
+          {/* Circular face preview with gold ring */}
+          <div className="flex flex-col items-center gap-1.5">
             <div className="relative">
               <img
                 src={heroFace}
@@ -78,7 +89,7 @@ export default function PhotoUpload() {
                     "0 0 20px rgba(240,192,64,0.5), 0 0 40px rgba(240,192,64,0.2)",
                 }}
               />
-              {/* Animated ring */}
+              {/* Animated outer ring */}
               <div
                 className="absolute inset-0 rounded-full pointer-events-none"
                 style={{
@@ -109,8 +120,7 @@ export default function PhotoUpload() {
               }}
               data-ocid="change-face-btn"
             >
-              <RefreshCw size={14} />
-              चेहरा बदलें
+              <RefreshCw size={14} />🔄 Change Karo
             </button>
             <button
               type="button"
@@ -130,7 +140,7 @@ export default function PhotoUpload() {
         </div>
       ) : (
         <div className="w-full flex flex-col items-center gap-3">
-          {/* Placeholder circle */}
+          {/* Placeholder DZ circle */}
           <div className="flex flex-col items-center gap-2">
             <button
               type="button"
@@ -139,7 +149,7 @@ export default function PhotoUpload() {
               style={{
                 border: "2px dashed rgba(240,192,64,0.5)",
                 background:
-                  "radial-gradient(circle, rgba(6,68,32,0.8) 0%, rgba(2,5,3,0.8) 100%)",
+                  "radial-gradient(circle, rgba(6,68,32,0.85) 0%, rgba(2,5,3,0.85) 100%)",
                 color: "#f0c040",
               }}
               aria-label="Upload hero face"
@@ -147,7 +157,7 @@ export default function PhotoUpload() {
             >
               <Camera size={24} style={{ color: "#f0c040" }} />
               <span
-                className="text-xs mt-1 font-semibold"
+                className="text-xs mt-1 font-bold"
                 style={{ color: "#f0c040" }}
               >
                 DZ
@@ -173,8 +183,7 @@ export default function PhotoUpload() {
             }}
             data-ocid="upload-face-btn"
           >
-            <Upload size={18} />
-            अपनी फोटो लगाओ (Hero Face)
+            📷 Photo Upload Karo
           </button>
         </div>
       )}

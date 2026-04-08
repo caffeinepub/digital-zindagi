@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 export type GamePhase = "start" | "playing" | "paused" | "gameover";
 export type WeaponType = "rifle" | "shotgun" | "plasma";
+export type UpgradeType = "damage_boost" | "heal" | "revive_partner" | "shield";
 
 export interface Enemy {
   id: string;
@@ -31,6 +32,10 @@ export interface GameState {
   heroFace: string | null;
   volume: number;
 
+  // Combat modifiers
+  damageMultiplier: number;
+  shieldActive: boolean;
+
   // Weapon system
   currentWeapon: WeaponType;
   setWeapon: (weapon: WeaponType) => void;
@@ -47,6 +52,10 @@ export interface GameState {
   damagePartner: (index: 0 | 1, dmg: number) => void;
   addScore: (pts: number) => void;
   addCoins: (n: number) => void;
+  /** Deduct coins if balance sufficient. Returns true on success, false if not enough. */
+  spendCoins: (amount: number) => boolean;
+  /** Apply a store upgrade effect to the current game state. */
+  applyUpgrade: (type: UpgradeType) => void;
   setGamePhase: (phase: GamePhase) => void;
   setHeroFace: (face: string | null) => void;
   setVolume: (v: number) => void;
@@ -71,6 +80,8 @@ function loadInitial(): Omit<
   | "damagePartner"
   | "addScore"
   | "addCoins"
+  | "spendCoins"
+  | "applyUpgrade"
   | "setGamePhase"
   | "setHeroFace"
   | "setVolume"
@@ -91,10 +102,12 @@ function loadInitial(): Omit<
     currentWeapon:
       (localStorage.getItem(STORAGE_WEAPON) as WeaponType) || "rifle",
     leaderboardVisible: false,
+    damageMultiplier: 1,
+    shieldActive: false,
   };
 }
 
-export const useGameStore = create<GameState>((set) => ({
+export const useGameStore = create<GameState>((set, get) => ({
   ...loadInitial(),
 
   setWeapon: (weapon) => {
@@ -108,6 +121,8 @@ export const useGameStore = create<GameState>((set) => ({
 
   damageHero: (dmg) =>
     set((s) => {
+      // Shield absorbs damage completely
+      if (s.shieldActive) return { shieldActive: false };
       const heroHP = Math.max(0, s.heroHP - dmg);
       if (heroHP === 0 && s.gamePhase === "playing") {
         const best = Number(localStorage.getItem(STORAGE_HIGH_SCORE) || "0");
@@ -150,6 +165,35 @@ export const useGameStore = create<GameState>((set) => ({
       return { coins };
     }),
 
+  spendCoins: (amount) => {
+    const { coins } = get();
+    if (coins < amount) return false;
+    const updated = coins - amount;
+    localStorage.setItem(STORAGE_COINS, String(updated));
+    set({ coins: updated });
+    return true;
+  },
+
+  applyUpgrade: (type) =>
+    set((s) => {
+      switch (type) {
+        case "damage_boost":
+          return { damageMultiplier: Math.min(s.damageMultiplier + 0.5, 3) };
+        case "heal":
+          return { heroHP: Math.min(s.heroMaxHP, s.heroHP + 40) };
+        case "revive_partner": {
+          const ph: [number, number] = [...s.partnerHP] as [number, number];
+          ph[0] = ph[0] <= 0 ? s.partnerMaxHP : ph[0];
+          ph[1] = ph[1] <= 0 ? s.partnerMaxHP : ph[1];
+          return { partnerHP: ph };
+        }
+        case "shield":
+          return { shieldActive: true };
+        default:
+          return {};
+      }
+    }),
+
   setGamePhase: (gamePhase) => set({ gamePhase }),
 
   setHeroFace: (heroFace) => {
@@ -167,6 +211,8 @@ export const useGameStore = create<GameState>((set) => ({
     set((s) => ({
       waveCount: s.waveCount + 1,
       heroHP: Math.min(s.heroMaxHP, s.heroHP + 30),
+      // Clear shield and multiplier at wave start for balance
+      shieldActive: false,
     })),
 
   resetGame: () =>
@@ -176,6 +222,8 @@ export const useGameStore = create<GameState>((set) => ({
       score: 0,
       waveCount: 1,
       gamePhase: "playing",
+      damageMultiplier: 1,
+      shieldActive: false,
     }),
 }));
 

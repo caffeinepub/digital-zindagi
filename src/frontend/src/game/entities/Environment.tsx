@@ -32,8 +32,8 @@ export function Ground() {
     <group>
       {/* Base concrete */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow position={[0, 0, 0]}>
-        <planeGeometry args={[80, 80]} />
-        <meshStandardMaterial color="#1a1a1a" roughness={0.95} metalness={0} />
+        <planeGeometry args={[100, 100]} />
+        <meshStandardMaterial color="#0d0a05" roughness={0.95} metalness={0} />
       </mesh>
       {/* Scorch marks */}
       {scorch.map((s) => (
@@ -138,9 +138,14 @@ export function Skeletons() {
       [8, 0, 8],
       [-16, 0, -7],
       [16, 0, 5],
+      // Extra skeletons for 10 total
+      [0, 0, -14],
+      [-9, 0, 13],
     ];
-    const rotY = [0.3, -0.8, 1.2, -0.4, 0.6, -1.1, 0.9, -0.3];
-    const tiltZ = [0.1, -0.15, 0.2, -0.05, 0.15, -0.2, 0.08, -0.12];
+    const rotY = [0.3, -0.8, 1.2, -0.4, 0.6, -1.1, 0.9, -0.3, 1.6, -1.4];
+    const tiltZ = [
+      0.1, -0.15, 0.2, -0.05, 0.15, -0.2, 0.08, -0.12, 0.25, -0.18,
+    ];
     return positions.map((pos, i) => ({
       pos,
       rotY: rotY[i],
@@ -236,6 +241,8 @@ export function BurningVehicles() {
       <BurningVehicle position={[12, 0, -8]} rotationY={-0.7} />
       <BurningVehicle position={[-5, 0, -16]} rotationY={1.1} />
       <BurningVehicle position={[18, 0, -4]} rotationY={-0.3} />
+      {/* 5th vehicle */}
+      <BurningVehicle position={[-18, 0, 2]} rotationY={0.85} />
     </group>
   );
 }
@@ -880,12 +887,12 @@ export function SceneLighting() {
 
   return (
     <>
-      {/* Deep dark red ambient */}
-      <ambientLight intensity={0.3} color="#1a0000" />
-      {/* Fire-orange directional */}
+      {/* Very dark ambient */}
+      <ambientLight intensity={0.25} color="#1a0000" />
+      {/* Fire-orange directional with shadow */}
       <directionalLight
-        position={[20, 30, 10]}
-        intensity={1.5}
+        position={[10, 20, 5]}
+        intensity={1.2}
         color="#ff4400"
         castShadow
         shadow-mapSize={[2048, 2048]}
@@ -896,15 +903,15 @@ export function SceneLighting() {
       <pointLight
         ref={fireRef1}
         position={[-14, 4, -6]}
-        color="#ff5010"
-        intensity={2}
+        color="#ff3300"
+        intensity={3}
         distance={20}
       />
       <pointLight
         ref={fireRef2}
         position={[12, 4, -8]}
-        color="#ff4808"
-        intensity={2}
+        color="#ff3300"
+        intensity={3}
         distance={20}
       />
       {/* Back wall fire */}
@@ -914,6 +921,19 @@ export function SceneLighting() {
         color="#ff3300"
         intensity={1.5}
         distance={18}
+      />
+      {/* Two dramatic red-orange logo glow lights */}
+      <pointLight
+        position={[-8, 28, -60]}
+        color="#ff3300"
+        intensity={3}
+        distance={55}
+      />
+      <pointLight
+        position={[8, 28, -60]}
+        color="#ff3300"
+        intensity={3}
+        distance={55}
       />
       {/* Blue hero area fill */}
       <pointLight

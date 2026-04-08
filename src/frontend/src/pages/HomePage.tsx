@@ -445,6 +445,144 @@ function WhatsAppIcon({ size = 22 }: { size?: number }) {
   );
 }
 
+// ─── Game Featured Section ─────────────────────────────────────────────────────
+
+function GameFeaturedSection() {
+  const navigate = useNavigate();
+  const gameVisible = localStorage.getItem("dz_game_visible") !== "false";
+  if (!gameVisible) return null;
+
+  return (
+    <section
+      className="px-4 pt-6 pb-2 max-w-7xl mx-auto"
+      data-ocid="game-featured-section"
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="relative rounded-2xl overflow-hidden cursor-pointer group"
+        style={{
+          background:
+            "linear-gradient(135deg, #020a04 0%, #061208 40%, #0a1e10 100%)",
+          border: "1px solid rgba(240,192,64,0.3)",
+          boxShadow:
+            "0 0 40px rgba(0,100,40,0.2), inset 0 1px 0 rgba(240,192,64,0.1)",
+        }}
+        onClick={() => navigate("/game")}
+      >
+        {/* Animated fire particles (CSS) */}
+        <div
+          className="absolute inset-0 opacity-30"
+          style={{
+            background:
+              "radial-gradient(ellipse at 70% 50%, rgba(255,100,0,0.3) 0%, transparent 60%), radial-gradient(ellipse at 30% 80%, rgba(0,255,100,0.15) 0%, transparent 50%)",
+            animation: "pulse 3s ease-in-out infinite alternate",
+          }}
+        />
+
+        {/* Background scene image (non-blocking — loads async) */}
+        <div
+          className="absolute inset-0 opacity-40 transition-opacity duration-500 group-hover:opacity-55"
+          style={{
+            backgroundImage:
+              "url(/assets/generated/game-scene-bg.dim_1920x1080.jpg)",
+            backgroundSize: "cover",
+            backgroundPosition: "center top",
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(90deg, rgba(2,5,3,0.94) 0%, rgba(2,5,3,0.72) 60%, rgba(2,5,3,0.5) 100%)",
+          }}
+        />
+
+        {/* Content */}
+        <div className="relative z-10 p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center gap-5">
+          <div className="flex-1 min-w-0">
+            {/* Badge */}
+            <div
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full mb-3 text-xs font-bold"
+              style={{
+                background: "rgba(240,192,64,0.15)",
+                border: "1px solid rgba(240,192,64,0.35)",
+                color: "#f0c040",
+              }}
+            >
+              🎮 Exclusive Game
+            </div>
+
+            <div
+              className="text-3xl sm:text-4xl font-black mb-1 tracking-wide"
+              style={{
+                color: "#00ff88",
+                textShadow: "0 0 24px rgba(0,255,136,0.6), 0 0 6px #ff6600",
+              }}
+            >
+              🔥 Real Human
+            </div>
+            <div
+              className="text-sm font-semibold mb-3"
+              style={{ color: "#f0c040", textShadow: "0 0 10px #f0c040" }}
+            >
+              Digital Zindagi ka exclusive combat game
+            </div>
+            <p
+              className="text-sm mb-4 leading-relaxed"
+              style={{ color: "rgba(255,255,255,0.72)" }}
+            >
+              Post-apocalyptic arena mein mutant hounds aur alien demons se
+              ladho! Apna photo laga hero ke chehre par, coins collect karo aur
+              high score banao. 3D HD visuals.
+            </p>
+
+            {/* Feature tags */}
+            <div className="flex flex-wrap gap-2">
+              {[
+                "⚔ Squad of 3",
+                "👾 AI Enemies",
+                "🪙 Coin System",
+                "🏆 Weekly Leaderboard",
+              ].map((tag) => (
+                <span
+                  key={tag}
+                  className="text-xs px-2.5 py-1 rounded-full"
+                  style={{
+                    background: "rgba(255,255,255,0.07)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    color: "rgba(255,255,255,0.6)",
+                  }}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* CTA Button */}
+          <div className="flex-shrink-0 w-full md:w-auto">
+            <button
+              type="button"
+              data-ocid="game-cta-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate("/game");
+              }}
+              className="game-cta-gold w-full md:w-auto px-8 py-4 rounded-2xl text-xl font-black flex items-center justify-center gap-3 transition-all hover:scale-105 active:scale-95"
+              style={{ minWidth: 180 }}
+            >
+              <span>▶</span>
+              Khelo Abhi! →
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </section>
+  );
+}
+
 export default function HomePage() {
   const { data: banners, isLoading: bannersLoading } = useActiveBanners();
   const { data: providers, isLoading: providersLoading } = useActiveProviders();
@@ -487,10 +625,8 @@ export default function HomePage() {
     if (!providers || providers.length === 0)
       return { list: [], radiusUsed: 0, hasLocation: false };
     if (!userLocation) {
-      // No GPS — show first 6
       return { list: providers.slice(0, 6), radiusUsed: 0, hasLocation: false };
     }
-    // Read lat/lng from localStorage providers to enrich backend profiles
     type LsProvider = { mobile?: string; lat?: number; lng?: number };
     type EnrichedProvider = (typeof providers)[0] & {
       lat?: number;
@@ -533,7 +669,6 @@ export default function HomePage() {
         return { list: nearby, radiusUsed: radius, hasLocation: true };
       }
     }
-    // No providers with location — show all (unfiltered)
     return { list: providers.slice(0, 6), radiusUsed: 0, hasLocation: true };
   };
 
@@ -543,7 +678,6 @@ export default function HomePage() {
     hasLocation: locationUsed,
   } = getLocalProviders();
 
-  // Read lowest 1-month price from category localStorage settings
   const lowestPrice = useMemo(() => {
     const prices = ALL_CATEGORIES.flatMap((cat) => {
       try {
@@ -610,7 +744,6 @@ export default function HomePage() {
     ...customSocialPlatforms,
   ];
 
-  // Whether any top-section button is visible
   const hasTopSection =
     sectionToggles.dz_section_news ||
     sectionToggles.dz_section_jobs ||
@@ -618,9 +751,6 @@ export default function HomePage() {
     sectionToggles.dz_section_ai_enhancer ||
     sectionToggles.dz_section_age_calculator ||
     sectionToggles.dz_section_percentage_calculator;
-
-  // Game section admin toggle
-  const gameVisible = localStorage.getItem("dz_game_visible") !== "false";
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -688,88 +818,8 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* === REAL HUMAN GAME FEATURED SECTION — Main Attraction === */}
-        {gameVisible && (
-          <section
-            className="px-4 pt-6 pb-2 max-w-7xl mx-auto"
-            data-ocid="game-featured-section"
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="relative rounded-2xl overflow-hidden"
-              style={{
-                background:
-                  "linear-gradient(135deg, #020a04 0%, #061208 40%, #0a1e10 100%)",
-                border: "1px solid rgba(0,255,100,0.2)",
-                boxShadow: "0 0 30px rgba(0,100,40,0.15)",
-              }}
-            >
-              {/* Background scene image */}
-              <div
-                className="absolute inset-0 opacity-50"
-                style={{
-                  backgroundImage:
-                    "url(/assets/generated/game-scene-bg.dim_1920x1080.jpg)",
-                  backgroundSize: "cover",
-                  backgroundPosition: "center top",
-                }}
-              />
-              <div
-                className="absolute inset-0"
-                style={{
-                  background:
-                    "linear-gradient(90deg, rgba(2,5,3,0.92) 0%, rgba(2,5,3,0.7) 60%, rgba(2,5,3,0.5) 100%)",
-                }}
-              />
-
-              <div className="relative z-10 p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center gap-5">
-                <div className="flex-1">
-                  <div
-                    className="text-3xl font-bold mb-1"
-                    style={{
-                      color: "#00ff88",
-                      textShadow: "0 0 20px rgba(0,255,136,0.5)",
-                    }}
-                  >
-                    🔥 Real Human
-                  </div>
-                  <div className="text-sm mb-3" style={{ color: "#f0c040" }}>
-                    Digital Zindagi — 3D Battle Game
-                  </div>
-                  <p
-                    className="text-sm mb-4"
-                    style={{ color: "rgba(255,255,255,0.75)" }}
-                  >
-                    Post-apocalyptic arena mein mutant hounds aur alien demons
-                    se ladho! Apna photo laga hero ke chehre par, coins collect
-                    karo aur high score banao.
-                  </p>
-                  <div
-                    className="flex flex-wrap gap-3 text-xs"
-                    style={{ color: "rgba(255,255,255,0.5)" }}
-                  >
-                    <span>⚔ Squad of 3</span>
-                    <span>👾 AI Enemies</span>
-                    <span>🪙 Coin Collection</span>
-                    <span>📱 Mobile-First</span>
-                  </div>
-                </div>
-                <div className="flex-shrink-0 w-full md:w-auto">
-                  <Link
-                    to="/game"
-                    data-ocid="game-cta-btn"
-                    className="game-cta-gold w-full md:w-auto px-8 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-3 transition-all hover:scale-105"
-                  >
-                    <span className="text-2xl">🎮</span>
-                    Khelo Abhi!
-                  </Link>
-                </div>
-              </div>
-            </motion.div>
-          </section>
-        )}
+        {/* === REAL HUMAN GAME FEATURED SECTION — No canvas, just a styled button === */}
+        <GameFeaturedSection />
 
         {/* Rate Calculator + Delivery side-by-side (Rate Calculator = 50% width) */}
         {homepageSettings.showRateCalculator && (

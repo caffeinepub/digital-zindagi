@@ -8,13 +8,14 @@ import GameHUD from "../game/ui/GameHUD";
 import Leaderboard from "../game/ui/Leaderboard";
 import PhotoUpload from "../game/ui/PhotoUpload";
 import VirtualJoystick from "../game/ui/VirtualJoystick";
+import WeaponSelect from "../game/ui/WeaponSelect";
 import { GameAudio, SFX, resumeAudio } from "../game/utils/audioEngine";
 import {
   type LeaderboardEntry,
   addScore as addLeaderboardScore,
   isHighScore,
 } from "../game/utils/leaderboard";
-import { Link } from "../lib/router";
+import { Link, useNavigate } from "../lib/router";
 
 // ─── Rotate Warning Overlay ───────────────────────────────────────────────────
 
@@ -28,11 +29,10 @@ function RotateWarning() {
       }}
       data-ocid="rotate-warning"
     >
-      {/* Animated rotate icon */}
       <div
         style={{
           fontSize: 72,
-          animation: "spin 2s linear infinite",
+          animation: "dzSpin 2s ease-in-out infinite",
           display: "inline-block",
         }}
       >
@@ -45,13 +45,13 @@ function RotateWarning() {
       >
         Please rotate your device
         <br />
-        to play Digital Zindagi
+        to play Digital Zindagi 🔄
       </div>
       <div
         className="text-base font-semibold text-center mt-3 px-8"
         style={{ color: "#f0c040", textShadow: "0 0 10px #f0c040" }}
       >
-        डिजिटल ज़िंदगी खेलने के लिए फोन घुमाएँ 🔄
+        डिजिटल ज़िंदगी खेलने के लिए फोन घुमाएँ
       </div>
 
       <div className="mt-8 opacity-60" style={{ color: "#aaa", fontSize: 14 }}>
@@ -59,7 +59,7 @@ function RotateWarning() {
       </div>
 
       <style>{`
-        @keyframes spin {
+        @keyframes dzSpin {
           0%   { transform: rotate(0deg); }
           25%  { transform: rotate(90deg); }
           50%  { transform: rotate(90deg); }
@@ -71,6 +71,15 @@ function RotateWarning() {
   );
 }
 
+// ─── WhatsApp Share helper ────────────────────────────────────────────────────
+
+function shareOnWhatsApp(score: number, wave: number) {
+  const text = encodeURIComponent(
+    `🔥 Maine Digital Zindagi: Real Human mein ${score.toLocaleString()} score kiya! Wave ${wave} tak pahuncha!\n\n🎮 Tum bhi khelo: ${window.location.href}\n\nDigital Zindagi — Apna score beat karo! 💪`,
+  );
+  window.open(`https://wa.me/?text=${text}`, "_blank", "noopener,noreferrer");
+}
+
 // ─── Main GamePage ─────────────────────────────────────────────────────────────
 
 export default function GamePage() {
@@ -80,12 +89,15 @@ export default function GamePage() {
     coins,
     heroHP,
     gamePhase,
+    currentWeapon,
     resetGame,
+    setWeapon,
     volume,
     leaderboardVisible,
     setLeaderboardVisible,
   } = useGameStore();
 
+  const navigate = useNavigate();
   const keys = useRef<Set<string>>(new Set());
   const joystick = useRef({ x: 0, y: 0 });
   const [showRotateWarning, setShowRotateWarning] = useState(false);
@@ -115,8 +127,6 @@ export default function GamePage() {
     }
 
     checkOrientation();
-
-    // Orientation change listeners
     window.addEventListener("orientationchange", checkOrientation);
     if (screen.orientation) {
       screen.orientation.addEventListener("change", checkOrientation);
@@ -146,7 +156,7 @@ export default function GamePage() {
     };
   }, []);
 
-  // ── Request fullscreen + landscape lock when game starts
+  // ── Request fullscreen + landscape lock when game starts playing
   useEffect(() => {
     if (gamePhase !== "playing") return;
 
@@ -161,13 +171,6 @@ export default function GamePage() {
         void (
           el as HTMLElement & { webkitRequestFullscreen: () => Promise<void> }
         ).webkitRequestFullscreen();
-      } else if (
-        (el as HTMLElement & { mozRequestFullScreen?: () => Promise<void> })
-          .mozRequestFullScreen
-      ) {
-        void (
-          el as HTMLElement & { mozRequestFullScreen: () => Promise<void> }
-        ).mozRequestFullScreen();
       }
     } catch {}
 
@@ -200,6 +203,7 @@ export default function GamePage() {
       gameOverHandled.current = true;
       const entry = addLeaderboardScore(score, waveCount);
       setLatestEntry(entry);
+      SFX.gameOver(volume);
       if (isHighScore(score)) {
         setTimeout(() => setLeaderboardVisible(true), 1200);
       }
@@ -208,11 +212,23 @@ export default function GamePage() {
       gameOverHandled.current = false;
       setLatestEntry(null);
     }
-  }, [gamePhase, score, waveCount, setLeaderboardVisible]);
+  }, [gamePhase, score, waveCount, setLeaderboardVisible, volume]);
 
   const handleStartGame = useCallback(() => {
     resumeAudio();
     SFX.waveStart(volume);
+    // (1) request fullscreen, (2) lock landscape, (3) reset game → playing
+    const el = document.documentElement;
+    try {
+      if (el.requestFullscreen) void el.requestFullscreen();
+    } catch {}
+    try {
+      void (
+        screen.orientation as ScreenOrientation & {
+          lock?: (o: string) => Promise<void>;
+        }
+      ).lock?.("landscape");
+    } catch {}
     resetGame();
   }, [resetGame, volume]);
 
@@ -234,6 +250,13 @@ export default function GamePage() {
     setTimeout(() => keys.current.delete("Space"), 200);
   }, []);
 
+  const handleGoHome = useCallback(() => {
+    try {
+      if (document.fullscreenElement) void document.exitFullscreen();
+    } catch {}
+    navigate("/");
+  }, [navigate]);
+
   return (
     <div
       className="fixed inset-0 overflow-hidden"
@@ -243,7 +266,7 @@ export default function GamePage() {
       {/* Rotate warning — highest z-index */}
       {showRotateWarning && <RotateWarning />}
 
-      {/* 3D Canvas layer */}
+      {/* 3D Canvas layer — always rendered for pre-loading */}
       <div className="absolute inset-0">
         <GameCanvas keys={keys} joystick={joystick} />
       </div>
@@ -255,7 +278,7 @@ export default function GamePage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 flex flex-col items-center justify-center z-20"
+            className="absolute inset-0 flex flex-col items-center justify-center z-20 overflow-y-auto"
             style={{
               backgroundImage:
                 "url(/assets/generated/game-scene-bg.dim_1920x1080.jpg)",
@@ -266,19 +289,21 @@ export default function GamePage() {
             {/* Dark cinematic overlay */}
             <div
               className="absolute inset-0"
-              style={{ background: "rgba(0,0,0,0.78)" }}
+              style={{ background: "rgba(0,0,0,0.82)" }}
             />
 
-            <div className="relative z-10 flex flex-col items-center gap-5 px-5 max-w-sm w-full">
-              {/* Back */}
-              <Link
-                to="/"
-                className="absolute -top-10 left-0 flex items-center gap-1 text-sm opacity-60 hover:opacity-100 transition-opacity"
+            <div className="relative z-10 flex flex-col items-center gap-4 px-5 py-6 max-w-sm w-full">
+              {/* Back to home */}
+              <button
+                type="button"
+                onClick={handleGoHome}
+                className="self-start flex items-center gap-1 text-sm opacity-60 hover:opacity-100 transition-opacity"
                 style={{ color: "#f0c040" }}
+                data-ocid="game-back-btn"
               >
                 <ArrowLeft size={16} />
-                Home
-              </Link>
+                Home par Jao
+              </button>
 
               {/* Flaming title */}
               <motion.div
@@ -347,6 +372,16 @@ export default function GamePage() {
                 <PhotoUpload />
               </motion.div>
 
+              {/* Weapon selection — 3 cards */}
+              <motion.div
+                className="w-full"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+              >
+                <WeaponSelect selected={currentWeapon} onSelect={setWeapon} />
+              </motion.div>
+
               {/* Play CTA */}
               <motion.button
                 type="button"
@@ -355,8 +390,7 @@ export default function GamePage() {
                 className="game-cta-gold w-full py-4 rounded-2xl text-xl font-black flex items-center justify-center gap-2"
                 data-ocid="start-game-btn"
               >
-                <Play size={22} fill="currentColor" />
-                PLAY KARO! ⚔
+                <Play size={22} fill="currentColor" />▶ Shuru Karo!
               </motion.button>
 
               <div
@@ -383,7 +417,7 @@ export default function GamePage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="absolute inset-0 flex flex-col items-center justify-center z-20"
-            style={{ background: "rgba(0,0,0,0.9)" }}
+            style={{ background: "rgba(0,0,0,0.92)" }}
           >
             <motion.div
               initial={{ scale: 0.7, opacity: 0 }}
@@ -413,6 +447,7 @@ export default function GamePage() {
                 </motion.div>
               )}
 
+              {/* Score display */}
               <div className="text-center">
                 <div className="text-xs opacity-60" style={{ color: "#aaa" }}>
                   Aapka Score
@@ -445,9 +480,10 @@ export default function GamePage() {
                 <span>•</span>
                 <span>Wave {waveCount}</span>
                 <span>•</span>
-                <span>❤️ {heroHP} HP bachi</span>
+                <span>❤️ {heroHP} HP</span>
               </div>
 
+              {/* Action buttons */}
               <div className="flex gap-3 w-full">
                 <button
                   type="button"
@@ -455,8 +491,7 @@ export default function GamePage() {
                   className="game-cta-gold flex-1 py-3.5 rounded-xl font-bold flex items-center justify-center gap-2"
                   data-ocid="restart-game-btn"
                 >
-                  <RotateCcw size={18} />
-                  Fir Se!
+                  <RotateCcw size={18} />🔄 Dobara Khelo
                 </button>
                 <button
                   type="button"
@@ -472,13 +507,30 @@ export default function GamePage() {
                 </button>
               </div>
 
-              <Link
-                to="/"
+              {/* WhatsApp Share */}
+              <button
+                type="button"
+                onClick={() => shareOnWhatsApp(score, waveCount)}
+                className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-opacity hover:opacity-85"
+                style={{
+                  background: "#25d366",
+                  color: "#fff",
+                }}
+                data-ocid="gameover-whatsapp-btn"
+              >
+                📲 WhatsApp Par Share Karo
+              </button>
+
+              {/* Home button */}
+              <button
+                type="button"
+                onClick={handleGoHome}
                 className="text-sm opacity-50 hover:opacity-80 transition-opacity"
                 style={{ color: "#aaa" }}
+                data-ocid="gameover-home-btn"
               >
-                ← Homepage par Jao
-              </Link>
+                🏠 Wapas Jao (Home)
+              </button>
             </motion.div>
           </motion.div>
         )}

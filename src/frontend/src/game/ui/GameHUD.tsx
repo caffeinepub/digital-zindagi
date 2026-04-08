@@ -1,5 +1,5 @@
 import {
-  ArrowLeft,
+  LogOut,
   Pause,
   Play,
   Store,
@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "../../lib/router";
+import { useNavigate } from "../../lib/router";
 import { useGameStore } from "../stores/gameStore";
 import { GameAudio } from "../utils/audioEngine";
 import Leaderboard from "./Leaderboard";
@@ -59,9 +59,9 @@ const WEAPON_NAMES: Record<string, string> = {
   plasma: "Plasma Gun",
 };
 const WEAPON_COOLDOWN_MS: Record<string, number> = {
-  rifle: 1200,
-  shotgun: 2000,
-  plasma: 1500,
+  rifle: 400,
+  shotgun: 700,
+  plasma: 1200,
 };
 
 export default function GameHUD() {
@@ -79,20 +79,22 @@ export default function GameHUD() {
     setGamePhase,
     setLeaderboardVisible,
     leaderboardVisible,
+    resetGame,
   } = useGameStore();
 
+  const navigate = useNavigate();
   const [storeOpen, setStoreOpen] = useState(false);
   const [muted, setMuted] = useState(false);
   const [cooldownPct, setCooldownPct] = useState(1);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
   const cooldownRef = useRef<number>(0);
   const lastAttackRef = useRef<number>(0);
   const rafRef = useRef<number>(0);
 
   // Track attack cooldown progress
   useEffect(() => {
-    const cooldownMs = WEAPON_COOLDOWN_MS[currentWeapon] ?? 1200;
+    const cooldownMs = WEAPON_COOLDOWN_MS[currentWeapon] ?? 400;
 
-    // Listen for attack events via localStorage polling (simple bridge)
     const tick = () => {
       const now = Date.now();
       const elapsed = now - lastAttackRef.current;
@@ -102,7 +104,6 @@ export default function GameHUD() {
       rafRef.current = requestAnimationFrame(tick);
     };
 
-    // Detect attack via custom event from Hero
     const onAttack = () => {
       lastAttackRef.current = Date.now();
     };
@@ -128,6 +129,21 @@ export default function GameHUD() {
     setLeaderboardVisible(true);
     if (gamePhase === "playing") setGamePhase("paused");
   }, [setLeaderboardVisible, gamePhase, setGamePhase]);
+
+  const handleExitClick = useCallback(() => {
+    setShowExitConfirm(true);
+    if (gamePhase === "playing") setGamePhase("paused");
+  }, [gamePhase, setGamePhase]);
+
+  const handleExitConfirm = useCallback(() => {
+    resetGame();
+    navigate("/");
+  }, [resetGame, navigate]);
+
+  const handleExitCancel = useCallback(() => {
+    setShowExitConfirm(false);
+    if (gamePhase === "paused") setGamePhase("playing");
+  }, [gamePhase, setGamePhase]);
 
   const hpPct = (heroHP / heroMaxHP) * 100;
   const p0Pct = (partnerHP[0] / partnerMaxHP) * 100;
@@ -204,12 +220,12 @@ export default function GameHUD() {
         </button>
       </div>
 
-      {/* ── Top-right: Wave + Coins + Mute + Leaderboard ── */}
+      {/* ── Top-right: Exit + Wave + Coins + Mute + Leaderboard ── */}
       <div
         className="absolute top-2 right-2 z-10 flex flex-col gap-1 items-end"
         data-ocid="hud-wave-coins"
       >
-        {/* Mute + Leaderboard row */}
+        {/* Exit + Mute + Leaderboard row */}
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -234,6 +250,22 @@ export default function GameHUD() {
             data-ocid="hud-mute-btn"
           >
             {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+          </button>
+          {/* Exit button — top-right, red */}
+          <button
+            type="button"
+            onClick={handleExitClick}
+            className="rounded-xl p-2 flex items-center justify-center transition-all hover:opacity-80"
+            style={{
+              background: "#dc2626",
+              color: "#fff",
+              minWidth: 36,
+              minHeight: 36,
+            }}
+            aria-label="Exit game"
+            data-ocid="hud-exit-btn"
+          >
+            <LogOut size={16} />
           </button>
         </div>
 
@@ -321,9 +353,9 @@ export default function GameHUD() {
         </div>
       </div>
 
-      {/* ── Bottom-right: Store button + Back ── */}
+      {/* ── Bottom-center: Store button ── */}
       <div
-        className="absolute bottom-36 right-2 z-10 flex flex-col gap-2 items-end md:bottom-4"
+        className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10"
         data-ocid="hud-store"
       >
         <button
@@ -332,21 +364,18 @@ export default function GameHUD() {
             setStoreOpen(true);
             setGamePhase("paused");
           }}
-          className="game-cta-gold flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-bold text-sm"
-          style={{ minHeight: 44 }}
+          className="flex items-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm transition-all hover:opacity-90 active:scale-95"
+          style={{
+            background: "linear-gradient(135deg, #064420, #0a6830)",
+            color: "#f0c040",
+            border: "2px solid #f0c040",
+            minHeight: 48,
+            boxShadow: "0 0 16px rgba(240,192,64,0.3)",
+          }}
           data-ocid="hud-store-btn"
         >
-          <Store size={16} />
-          दुकान
+          <Store size={18} />🏪 Store
         </button>
-        <Link
-          to="/"
-          className="game-hud-bg rounded-xl px-3 py-2 flex items-center justify-center"
-          style={{ color: "#f0c040", minHeight: 44 }}
-          aria-label="Go home"
-        >
-          <ArrowLeft size={16} />
-        </Link>
       </div>
 
       {/* ── Store Modal ── */}
@@ -363,9 +392,10 @@ export default function GameHUD() {
 
       {/* ── Pause Menu ── */}
       <AnimatePresence>
-        {gamePhase === "paused" && !storeOpen && !leaderboardVisible && (
-          <PauseMenu />
-        )}
+        {gamePhase === "paused" &&
+          !storeOpen &&
+          !leaderboardVisible &&
+          !showExitConfirm && <PauseMenu />}
       </AnimatePresence>
 
       {/* ── Leaderboard ── */}
@@ -377,6 +407,75 @@ export default function GameHUD() {
               if (gamePhase === "paused") setGamePhase("playing");
             }}
           />
+        )}
+      </AnimatePresence>
+
+      {/* ── Exit Confirmation Dialog ── */}
+      <AnimatePresence>
+        {showExitConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 flex items-center justify-center"
+            style={{ background: "rgba(0,0,0,0.85)" }}
+            data-ocid="exit-confirm-overlay"
+          >
+            <motion.div
+              initial={{ scale: 0.85, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.85, opacity: 0, y: 20 }}
+              transition={{ type: "spring", stiffness: 320, damping: 26 }}
+              className="rounded-2xl p-6 max-w-xs w-full mx-4 flex flex-col items-center gap-4"
+              style={{
+                background: "rgba(10,15,12,0.98)",
+                border: "2px solid rgba(220,38,38,0.6)",
+                boxShadow: "0 0 30px rgba(220,38,38,0.25)",
+              }}
+              data-ocid="exit-confirm-card"
+            >
+              <div className="text-4xl">🚪</div>
+              <div className="text-center">
+                <div
+                  className="text-xl font-bold mb-1"
+                  style={{ color: "#fff" }}
+                >
+                  Game se bahar jaana chahte hain?
+                </div>
+                <div className="text-sm" style={{ color: "#aaa" }}>
+                  Aapka score save ho jaayega
+                </div>
+              </div>
+              <div className="flex gap-3 w-full">
+                <button
+                  type="button"
+                  onClick={handleExitConfirm}
+                  className="flex-1 py-3 rounded-xl font-bold text-sm transition-all hover:opacity-90 active:scale-95"
+                  style={{
+                    background: "#dc2626",
+                    color: "#fff",
+                    border: "1px solid rgba(255,100,100,0.4)",
+                  }}
+                  data-ocid="exit-confirm-yes-btn"
+                >
+                  ✅ Haan, Jao
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExitCancel}
+                  className="flex-1 py-3 rounded-xl font-bold text-sm transition-all hover:opacity-90 active:scale-95"
+                  style={{
+                    background: "linear-gradient(135deg, #064420, #0a6830)",
+                    color: "#f0c040",
+                    border: "1px solid rgba(240,192,64,0.4)",
+                  }}
+                  data-ocid="exit-confirm-no-btn"
+                >
+                  ❌ Nahi, Khelo
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </>
