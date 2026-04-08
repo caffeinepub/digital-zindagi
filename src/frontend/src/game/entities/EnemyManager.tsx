@@ -15,7 +15,6 @@ interface EnemyManagerProps {
   onEnemiesUpdate: (refs: EnemyRef[]) => void;
 }
 
-// Extended type to include new HD monster variants
 type EnemyType = "triHound" | "alienDemon";
 
 interface EnemyState {
@@ -31,29 +30,33 @@ interface EnemyState {
   velocity: THREE.Vector3;
   orbitAngle: number;
   projectiles: Array<{ mesh: THREE.Mesh; vel: THREE.Vector3; life: number }>;
-  // animation state
   animPhase: number;
-  // pounce state for triHound
   pounceTimer: number;
   isPouncing: boolean;
 }
 
 let enemyIdCounter = 0;
-
-/** Wave tracking */
 let waveNumber = 0;
 
+const HERO_START = new THREE.Vector3(0, 0, 3);
+const MIN_SPAWN_DIST = 12;
+
 function randomSpawnPosition(): THREE.Vector3 {
-  const angle = Math.random() * Math.PI * 2;
-  const dist = 18 + Math.random() * 4;
-  return new THREE.Vector3(Math.cos(angle) * dist, 0, Math.sin(angle) * dist);
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 18 + Math.random() * 4;
+    const pos = new THREE.Vector3(
+      Math.cos(angle) * dist,
+      0,
+      Math.sin(angle) * dist,
+    );
+    if (pos.distanceTo(HERO_START) >= MIN_SPAWN_DIST) return pos;
+  }
+  return new THREE.Vector3(0, 0, -20);
 }
 
 function createEnemy(type: EnemyType): EnemyState {
-  const hpMap: Record<EnemyType, number> = {
-    triHound: 135, // +15% vs base 120
-    alienDemon: 144, // +20% vs base 120
-  };
+  const hpMap: Record<EnemyType, number> = { triHound: 135, alienDemon: 144 };
   const hp = hpMap[type];
   return {
     id: `enemy-${++enemyIdCounter}`,
@@ -74,18 +77,15 @@ function createEnemy(type: EnemyType): EnemyState {
   };
 }
 
-/** Determine spawn types based on wave */
 function getWaveSpawnTypes(wave: number): EnemyType[] {
   const isBonus = wave % 3 === 0;
   const baseCount = 3 + Math.floor(wave * 0.7);
-  const bonusCount = isBonus ? 2 : 0;
-  const total = baseCount + bonusCount;
+  const total = baseCount + (isBonus ? 2 : 0);
   const types: EnemyType[] = [];
   for (let i = 0; i < total; i++) {
     if (wave <= 2) {
       types.push("triHound");
     } else {
-      // Wave 3+: mix triHound + alienDemon (increasing demon ratio)
       const demonChance = Math.min(0.6, 0.2 + wave * 0.05);
       types.push(Math.random() < demonChance ? "alienDemon" : "triHound");
     }
@@ -105,8 +105,7 @@ export const EnemyManager = forwardRef<EnemyRef[], EnemyManagerProps>(
 
     function spawnInitialEnemies() {
       waveNumber = 1;
-      const types = getWaveSpawnTypes(waveNumber);
-      for (const type of types) {
+      for (const type of getWaveSpawnTypes(waveNumber)) {
         enemies.current.push(createEnemy(type));
       }
     }
@@ -123,10 +122,8 @@ export const EnemyManager = forwardRef<EnemyRef[], EnemyManagerProps>(
               e.isDead = true;
               e.fadeOut = 1.0;
               const store = useGameStore.getState();
-              const scoreAmt = e.type === "triHound" ? 250 : 300;
-              const coinAmt = e.type === "triHound" ? 4 : 5;
-              store.addScore(scoreAmt);
-              store.addCoins(coinAmt);
+              store.addScore(e.type === "triHound" ? 250 : 300);
+              store.addCoins(e.type === "triHound" ? 4 : 5);
               SFX.enemyDie(store.volume);
             }
           },
@@ -143,14 +140,12 @@ export const EnemyManager = forwardRef<EnemyRef[], EnemyManagerProps>(
       }
 
       const heroPos = heroPosition.current;
-
-      // Wave spawn timer
       spawnTimer.current -= delta;
+
       if (spawnTimer.current <= 0) {
         waveNumber += 1;
         spawnTimer.current = 12;
         const types = getWaveSpawnTypes(waveNumber);
-        // Spawn gradually — add 1-2 enemies per tick
         const spawnCount = Math.min(2, types.length);
         for (let i = 0; i < spawnCount; i++) {
           enemies.current.push(createEnemy(types[i]));
@@ -166,14 +161,14 @@ export const EnemyManager = forwardRef<EnemyRef[], EnemyManagerProps>(
           const mesh = meshes.current.get(e.id);
           if (mesh) {
             const s = Math.max(0, e.fadeOut);
+            // tip over and shrink for skeleton crumble effect
             mesh.scale.setScalar(s);
+            mesh.rotation.z = (1 - s) * 1.5;
           }
           continue;
         }
 
         const dist = e.position.distanceTo(heroPos);
-
-        // AI state machine
         if (e.hp < e.maxHp * 0.3) {
           e.behaviorState = "retreat";
         } else if (dist <= (e.type === "triHound" ? 2.5 : 7)) {
@@ -198,14 +193,12 @@ export const EnemyManager = forwardRef<EnemyRef[], EnemyManagerProps>(
           }
         }
 
-        // Update mesh position
         const mesh = meshes.current.get(e.id);
         if (mesh) {
           mesh.position.copy(e.position);
           if (e.type === "triHound") {
             mesh.lookAt(heroPos.clone().setY(e.position.y));
           } else {
-            // Alien demon faces hero
             const dir = heroPos.clone().sub(e.position).setY(0).normalize();
             if (dir.length() > 0.01) {
               mesh.rotation.y = Math.atan2(dir.x, dir.z);
@@ -214,7 +207,7 @@ export const EnemyManager = forwardRef<EnemyRef[], EnemyManagerProps>(
         }
       }
 
-      // Update alien demon projectiles
+      // Alien demon projectiles
       for (const e of enemies.current) {
         if (e.type === "alienDemon") {
           for (let i = e.projectiles.length - 1; i >= 0; i--) {
@@ -237,11 +230,9 @@ export const EnemyManager = forwardRef<EnemyRef[], EnemyManagerProps>(
         }
       }
 
-      // Clean up dead enemies
       enemies.current = enemies.current.filter(
         (e) => !e.isDead || e.fadeOut > 0,
       );
-
       onEnemiesUpdate(buildEnemyRefs());
     });
 
@@ -263,7 +254,6 @@ export const EnemyManager = forwardRef<EnemyRef[], EnemyManagerProps>(
         return;
       }
 
-      // Pounce mechanic
       e.pounceTimer -= delta;
       if (e.pounceTimer <= 0 && dist < 6 && dist > 2.5) {
         e.pounceTimer = 3 + Math.random() * 2;
@@ -277,27 +267,23 @@ export const EnemyManager = forwardRef<EnemyRef[], EnemyManagerProps>(
           .multiplyScalar(14 * delta);
         e.position.add(lunge);
         if (dist < 2) e.isPouncing = false;
-      } else {
-        // Standard chase
-        if (dist > 2.2) {
-          const toward = heroPos
-            .clone()
-            .sub(e.position)
-            .normalize()
-            .multiplyScalar(7 * delta);
-          e.position.add(toward);
-        }
+      } else if (dist > 2.2) {
+        const toward = heroPos
+          .clone()
+          .sub(e.position)
+          .normalize()
+          .multiplyScalar(7 * delta);
+        e.position.add(toward);
       }
 
       e.attackTimer -= delta;
       if (dist <= 2.8 && e.attackTimer <= 0) {
         e.attackTimer = 1.4;
-        store.damageHero(18); // upgraded damage
+        store.damageHero(18);
         SFX.houndBite(store.volume);
         SFX.heroHit(store.volume * 0.6);
       }
 
-      // Keep in bounds
       e.position.x = Math.max(-22, Math.min(22, e.position.x));
       e.position.z = Math.max(-22, Math.min(22, e.position.z));
       e.position.y = 0;
@@ -310,7 +296,7 @@ export const EnemyManager = forwardRef<EnemyRef[], EnemyManagerProps>(
       scene: THREE.Scene,
       store: ReturnType<typeof useGameStore.getState>,
     ) {
-      const alienSpeed = 1.1; // +20% vs base demon
+      const alienSpeed = 1.1;
 
       if (e.behaviorState === "retreat") {
         const away = e.position
@@ -322,19 +308,17 @@ export const EnemyManager = forwardRef<EnemyRef[], EnemyManagerProps>(
         return;
       }
 
-      // Orbit around hero at ~7m
-      const orbitRadius = 7;
       e.orbitAngle += delta * 0.9 * alienSpeed;
+      const orbitRadius = 7;
       const targetX = heroPos.x + Math.cos(e.orbitAngle) * orbitRadius;
       const targetZ = heroPos.z + Math.sin(e.orbitAngle) * orbitRadius;
       e.position.x += (targetX - e.position.x) * 3.5 * delta;
       e.position.z += (targetZ - e.position.z) * 3.5 * delta;
-      // Hover — alien floats higher than base demon
       e.position.y = 0.8 + Math.sin(e.animPhase * 0.7) * 0.35;
 
       e.attackTimer -= delta;
       if (e.attackTimer <= 0) {
-        e.attackTimer = 1.6; // slightly faster than base demon
+        e.attackTimer = 1.6;
         spawnAlienProjectile(e, heroPos, scene);
         SFX.demonShoot(store.volume);
       }
@@ -345,7 +329,6 @@ export const EnemyManager = forwardRef<EnemyRef[], EnemyManagerProps>(
       heroPos: THREE.Vector3,
       scene: THREE.Scene,
     ) {
-      // Cyan glowing orb — alien signature
       const geo = new THREE.SphereGeometry(0.22, 8, 8);
       const mat = new THREE.MeshStandardMaterial({
         color: "#00ccff",
@@ -361,14 +344,11 @@ export const EnemyManager = forwardRef<EnemyRef[], EnemyManagerProps>(
         .add(new THREE.Vector3(0, 0.9, 0))
         .sub(mesh.position)
         .normalize();
-      // Add a point light to the projectile for visual effect
       const light = new THREE.PointLight("#00ffff", 2, 5);
       mesh.add(light);
       scene.add(mesh);
       e.projectiles.push({ mesh, vel: dir.multiplyScalar(11), life: 3.0 });
     }
-
-    // ─── Render ────────────────────────────────────────────────────────────────
 
     return (
       <group>
@@ -381,11 +361,8 @@ export const EnemyManager = forwardRef<EnemyRef[], EnemyManagerProps>(
               else meshes.current.delete(e.id);
             }}
             onWingRef={(left, right) => {
-              if (left || right) {
-                wingRefs.current.set(e.id, [left, right]);
-              } else {
-                wingRefs.current.delete(e.id);
-              }
+              if (left || right) wingRefs.current.set(e.id, [left, right]);
+              else wingRefs.current.delete(e.id);
             }}
           />
         ))}
@@ -394,117 +371,144 @@ export const EnemyManager = forwardRef<EnemyRef[], EnemyManagerProps>(
   },
 );
 
-// ─── Three-Headed Hound Mesh ──────────────────────────────────────────────────
+// ─── Skeleton Enemy (Three-Headed Hound) ────────────────────────────────────
 
 function TriHoundMesh({ hpFrac }: { hpFrac: number }) {
-  const bodyMat = (
-    <meshStandardMaterial color="#2d1b00" roughness={0.8} metalness={0.05} />
+  const boneMat = (
+    <meshStandardMaterial
+      color="#F5F0E8"
+      roughness={0.7}
+      emissive="#1a0033"
+      emissiveIntensity={0.4}
+    />
   );
   const eyeMat = (
     <meshStandardMaterial
-      color="#ff2200"
-      emissive="#ff2200"
-      emissiveIntensity={5}
+      color="#ff0000"
+      emissive="#ff0000"
+      emissiveIntensity={6}
     />
   );
-  const fangMat = <meshStandardMaterial color="#e8ddc0" roughness={0.5} />;
 
   return (
     <group>
-      {/* Main body — larger than standard */}
-      <mesh position={[0, 0.45, 0]} castShadow>
-        <boxGeometry args={[1.4, 0.8, 2.2]} />
-        {bodyMat}
-      </mesh>
-      {/* Muscular shoulder hump */}
-      <mesh position={[0, 0.85, 0.5]} castShadow>
-        <boxGeometry args={[1.0, 0.5, 0.8]} />
-        {bodyMat}
+      {/* ── Spine / Torso ── */}
+      <mesh position={[0, 0.5, 0.2]} castShadow>
+        <cylinderGeometry args={[0.06, 0.09, 0.6, 8]} />
+        {boneMat}
       </mesh>
 
-      {/* 3 Heads: center, left, right */}
-      {(
-        [
-          { id: "hc", x: 0, z: 1.2 },
-          { id: "hl", x: -0.55, z: 0.9 },
-          { id: "hr", x: 0.55, z: 0.9 },
-        ] as { id: string; x: number; z: number }[]
-      ).map(({ id, x, z }) => (
-        <group key={id} position={[x, 0.85, z]}>
-          {/* Head */}
-          <mesh castShadow>
-            <sphereGeometry args={[0.32, 10, 8]} />
-            {bodyMat}
+      {/* ── Ribcage ── */}
+      {(["rib0", "rib1", "rib2", "rib3"] as const).map((ribId, ri) => (
+        <group key={ribId} position={[0, 0.42 + ri * 0.1, 0.2]}>
+          <mesh position={[-0.22, 0, 0]} rotation={[0, 0, 0.4]} castShadow>
+            <boxGeometry args={[0.28, 0.04, 0.06]} />
+            {boneMat}
           </mesh>
-          {/* Snout */}
-          <mesh position={[0, -0.08, 0.26]} castShadow>
-            <boxGeometry args={[0.22, 0.18, 0.3]} />
-            {bodyMat}
-          </mesh>
-          {/* Left eye */}
-          <mesh position={[-0.13, 0.07, 0.28]}>
-            <sphereGeometry args={[0.07, 6, 6]} />
-            {eyeMat}
-          </mesh>
-          {/* Right eye */}
-          <mesh position={[0.13, 0.07, 0.28]}>
-            <sphereGeometry args={[0.07, 6, 6]} />
-            {eyeMat}
-          </mesh>
-          {/* Fangs */}
-          <mesh position={[-0.07, -0.16, 0.3]} rotation={[0.3, 0, 0.1]}>
-            <coneGeometry args={[0.04, 0.18, 5]} />
-            {fangMat}
-          </mesh>
-          <mesh position={[0.07, -0.16, 0.3]} rotation={[0.3, 0, -0.1]}>
-            <coneGeometry args={[0.04, 0.18, 5]} />
-            {fangMat}
-          </mesh>
-          {/* Neck connector */}
-          <mesh position={[0, -0.35, -0.2]} rotation={[0.3, 0, 0]}>
-            <cylinderGeometry args={[0.15, 0.2, 0.5, 8]} />
-            {bodyMat}
+          <mesh position={[0.22, 0, 0]} rotation={[0, 0, -0.4]} castShadow>
+            <boxGeometry args={[0.28, 0.04, 0.06]} />
+            {boneMat}
           </mesh>
         </group>
       ))}
 
-      {/* 4 Muscular legs */}
-      {(
-        [
-          { id: "lfl", x: -0.45, z: 0.7 },
-          { id: "lfr", x: 0.45, z: 0.7 },
-          { id: "lbl", x: -0.45, z: -0.7 },
-          { id: "lbr", x: 0.45, z: -0.7 },
-        ] as { id: string; x: number; z: number }[]
-      ).map(({ id, x, z }) => (
-        <mesh key={id} position={[x, 0.05, z]} castShadow>
-          <capsuleGeometry args={[0.14, 0.6, 4, 8]} />
-          {bodyMat}
-        </mesh>
-      ))}
-
-      {/* Tail */}
-      <mesh position={[0, 0.5, -1.2]} rotation={[-0.5, 0, 0.1]}>
-        <cylinderGeometry args={[0.07, 0.04, 0.8, 6]} />
-        {bodyMat}
+      {/* ── Pelvis ── */}
+      <mesh position={[0, 0.2, 0.2]} castShadow>
+        <boxGeometry args={[0.36, 0.12, 0.18]} />
+        {boneMat}
       </mesh>
 
-      {/* Red glow */}
+      {/* ── 3 Skulls (center + left + right) ── */}
+      {(
+        [
+          { id: "hc", x: 0, z: 0.65 },
+          { id: "hl", x: -0.38, z: 0.45 },
+          { id: "hr", x: 0.38, z: 0.45 },
+        ] as { id: string; x: number; z: number }[]
+      ).map(({ id, x, z }) => (
+        <group key={id} position={[x, 0.85, z]}>
+          {/* Skull */}
+          <mesh castShadow>
+            <sphereGeometry args={[0.2, 10, 8]} />
+            {boneMat}
+          </mesh>
+          {/* Jaw */}
+          <mesh position={[0, -0.14, 0.08]} castShadow>
+            <boxGeometry args={[0.22, 0.1, 0.18]} />
+            {boneMat}
+          </mesh>
+          {/* Glowing red eyes */}
+          <mesh position={[-0.09, 0.04, 0.17]}>
+            <sphereGeometry args={[0.055, 6, 6]} />
+            {eyeMat}
+          </mesh>
+          <mesh position={[0.09, 0.04, 0.17]}>
+            <sphereGeometry args={[0.055, 6, 6]} />
+            {eyeMat}
+          </mesh>
+          {/* Neck connector */}
+          <mesh position={[0, -0.28, -0.08]} rotation={[0.3, 0, 0]}>
+            <cylinderGeometry args={[0.06, 0.08, 0.3, 6]} />
+            {boneMat}
+          </mesh>
+        </group>
+      ))}
+
+      {/* ── 4 Bone Legs ── */}
+      {(
+        [
+          { id: "lfl", x: -0.2, z: 0.3 },
+          { id: "lfr", x: 0.2, z: 0.3 },
+          { id: "lbl", x: -0.2, z: 0.1 },
+          { id: "lbr", x: 0.2, z: 0.1 },
+        ] as { id: string; x: number; z: number }[]
+      ).map(({ id, x, z }) => (
+        <group key={id} position={[x, 0.2, z]}>
+          <mesh position={[0, -0.15, 0]} castShadow>
+            <cylinderGeometry args={[0.045, 0.035, 0.3, 6]} />
+            {boneMat}
+          </mesh>
+          <mesh position={[0, -0.34, 0.04]}>
+            <sphereGeometry args={[0.05, 6, 6]} />
+            {boneMat}
+          </mesh>
+          <mesh position={[0, -0.5, 0]} castShadow>
+            <cylinderGeometry args={[0.035, 0.028, 0.28, 6]} />
+            {boneMat}
+          </mesh>
+          <mesh position={[0, -0.67, 0.04]}>
+            <boxGeometry args={[0.1, 0.06, 0.14]} />
+            {boneMat}
+          </mesh>
+        </group>
+      ))}
+
+      {/* Bone arm stubs */}
+      <mesh position={[-0.28, 0.56, 0.2]} rotation={[0, 0, 0.6]} castShadow>
+        <cylinderGeometry args={[0.04, 0.03, 0.32, 6]} />
+        {boneMat}
+      </mesh>
+      <mesh position={[0.28, 0.56, 0.2]} rotation={[0, 0, -0.6]} castShadow>
+        <cylinderGeometry args={[0.04, 0.03, 0.32, 6]} />
+        {boneMat}
+      </mesh>
+
+      {/* Supernatural glow */}
       <pointLight
-        color="#ff2200"
-        intensity={1.0}
-        distance={6}
-        position={[0, 0.6, 0]}
+        color="#cc0022"
+        intensity={1.2}
+        distance={5}
+        position={[0, 0.8, 0]}
       />
 
       {/* HP bar */}
-      <group position={[0, 2.2, 0]}>
+      <group position={[0, 1.8, 0]}>
         <mesh>
-          <planeGeometry args={[1.2, 0.1]} />
+          <planeGeometry args={[1.0, 0.1]} />
           <meshBasicMaterial color="#330000" />
         </mesh>
-        <mesh position={[(hpFrac - 1) * 0.6, 0, 0.001]}>
-          <planeGeometry args={[1.2 * hpFrac, 0.08]} />
+        <mesh position={[(hpFrac - 1) * 0.5, 0, 0.001]}>
+          <planeGeometry args={[1.0 * hpFrac, 0.08]} />
           <meshBasicMaterial color="#ff3300" />
         </mesh>
       </group>
@@ -524,137 +528,175 @@ function AlienDemonMesh({
   const leftWingRef = useRef<THREE.Mesh>(null);
   const rightWingRef = useRef<THREE.Mesh>(null);
 
-  // Forward wing refs on mount
   const setWingRefs = (l: THREE.Mesh | null, r: THREE.Mesh | null) => {
     leftWingRef.current = l;
     rightWingRef.current = r;
     onWingRef(l, r);
   };
 
-  const bodyMat = (
+  const boneMat = (
     <meshStandardMaterial
-      color="#4b0082"
-      emissive="#7b00ff"
+      color="#F5F0E8"
+      roughness={0.7}
+      emissive="#1a0033"
       emissiveIntensity={0.5}
-      roughness={0.6}
-      metalness={0.1}
     />
   );
   const eyeMat = (
     <meshStandardMaterial
-      color="#00ffff"
-      emissive="#00ffff"
-      emissiveIntensity={6}
+      color="#ff0000"
+      emissive="#ff0000"
+      emissiveIntensity={7}
     />
   );
   const wingMat = (
     <meshStandardMaterial
-      color="#330055"
-      emissive="#5500aa"
-      emissiveIntensity={0.4}
+      color="#1a0033"
+      emissive="#4400aa"
+      emissiveIntensity={0.7}
       side={THREE.DoubleSide}
       transparent
-      opacity={0.82}
+      opacity={0.78}
     />
   );
 
   return (
     <group>
-      {/* Slim tall body */}
-      <mesh position={[0, 0.8, 0]} castShadow>
-        <capsuleGeometry args={[0.42, 1.4, 6, 12]} />
-        {bodyMat}
+      {/* ── Skull ── */}
+      <mesh position={[0, 1.5, 0]} scale={[1, 1.2, 1]} castShadow>
+        <sphereGeometry args={[0.2, 10, 8]} />
+        {boneMat}
       </mesh>
-
-      {/* Large elongated alien head */}
-      <mesh position={[0, 1.85, 0]} scale={[1, 1.5, 1]} castShadow>
-        <sphereGeometry args={[0.52, 14, 10]} />
-        {bodyMat}
+      {/* Jaw */}
+      <mesh position={[0, 1.32, 0.08]} castShadow>
+        <boxGeometry args={[0.22, 0.1, 0.16]} />
+        {boneMat}
       </mesh>
-
-      {/* Cyan glowing eyes */}
-      <mesh position={[-0.16, 1.95, 0.4]}>
-        <sphereGeometry args={[0.1, 8, 8]} />
+      {/* Red glowing eyes */}
+      <mesh position={[-0.09, 1.54, 0.17]}>
+        <sphereGeometry args={[0.06, 8, 8]} />
         {eyeMat}
       </mesh>
-      <mesh position={[0.16, 1.95, 0.4]}>
-        <sphereGeometry args={[0.1, 8, 8]} />
+      <mesh position={[0.09, 1.54, 0.17]}>
+        <sphereGeometry args={[0.06, 8, 8]} />
         {eyeMat}
       </mesh>
 
-      {/* Antenna left */}
-      <mesh position={[-0.18, 2.5, 0]} rotation={[0, 0, -0.2]}>
-        <cylinderGeometry args={[0.025, 0.015, 0.5, 5]} />
-        {bodyMat}
-      </mesh>
-      <mesh position={[-0.26, 2.76, 0]}>
-        <sphereGeometry args={[0.055, 6, 6]} />
-        <meshStandardMaterial
-          color="#00ffff"
-          emissive="#00ffff"
-          emissiveIntensity={4}
-        />
-      </mesh>
-      {/* Antenna right */}
-      <mesh position={[0.18, 2.5, 0]} rotation={[0, 0, 0.2]}>
-        <cylinderGeometry args={[0.025, 0.015, 0.5, 5]} />
-        {bodyMat}
-      </mesh>
-      <mesh position={[0.26, 2.76, 0]}>
-        <sphereGeometry args={[0.055, 6, 6]} />
-        <meshStandardMaterial
-          color="#00ffff"
-          emissive="#00ffff"
-          emissiveIntensity={4}
-        />
+      {/* ── Spine ── */}
+      <mesh position={[0, 0.9, 0]} castShadow>
+        <cylinderGeometry args={[0.055, 0.075, 0.65, 8]} />
+        {boneMat}
       </mesh>
 
-      {/* Wings — animated via wingRefs */}
+      {/* ── Ribcage ── */}
+      {(["drib0", "drib1", "drib2"] as const).map((dribId, ri) => (
+        <group key={dribId} position={[0, 1.05 + ri * 0.12, 0]}>
+          <mesh position={[-0.2, 0, 0]} rotation={[0, 0, 0.5]}>
+            <boxGeometry args={[0.24, 0.04, 0.08]} />
+            {boneMat}
+          </mesh>
+          <mesh position={[0.2, 0, 0]} rotation={[0, 0, -0.5]}>
+            <boxGeometry args={[0.24, 0.04, 0.08]} />
+            {boneMat}
+          </mesh>
+        </group>
+      ))}
+
+      {/* ── Pelvis ── */}
+      <mesh position={[0, 0.56, 0]} castShadow>
+        <boxGeometry args={[0.3, 0.1, 0.16]} />
+        {boneMat}
+      </mesh>
+
+      {/* ── Skeleton Arms ── */}
+      <mesh position={[-0.28, 1.1, 0]} rotation={[0, 0, 0.7]} castShadow>
+        <cylinderGeometry args={[0.04, 0.03, 0.38, 6]} />
+        {boneMat}
+      </mesh>
+      <mesh position={[-0.48, 0.86, 0]} rotation={[0, 0, 0.4]} castShadow>
+        <cylinderGeometry args={[0.033, 0.025, 0.34, 6]} />
+        {boneMat}
+      </mesh>
+      <mesh position={[0.28, 1.1, 0]} rotation={[0, 0, -0.7]} castShadow>
+        <cylinderGeometry args={[0.04, 0.03, 0.38, 6]} />
+        {boneMat}
+      </mesh>
+      <mesh position={[0.48, 0.86, 0]} rotation={[0, 0, -0.4]} castShadow>
+        <cylinderGeometry args={[0.033, 0.025, 0.34, 6]} />
+        {boneMat}
+      </mesh>
+
+      {/* ── Skeleton Legs ── */}
+      <mesh position={[-0.1, 0.32, 0]} rotation={[0.1, 0, 0.08]} castShadow>
+        <cylinderGeometry args={[0.055, 0.04, 0.44, 6]} />
+        {boneMat}
+      </mesh>
       <mesh
-        ref={(el) => setWingRefs(el, rightWingRef.current)}
-        position={[-1.4, 1.1, -0.15]}
-        rotation={[0.15, 0.15, -0.5]}
+        position={[-0.1, -0.04, 0.04]}
+        rotation={[-0.1, 0, 0.05]}
         castShadow
       >
-        <planeGeometry args={[2.4, 1.5]} />
+        <cylinderGeometry args={[0.04, 0.032, 0.4, 6]} />
+        {boneMat}
+      </mesh>
+      <mesh position={[0.1, 0.32, 0]} rotation={[0.1, 0, -0.08]} castShadow>
+        <cylinderGeometry args={[0.055, 0.04, 0.44, 6]} />
+        {boneMat}
+      </mesh>
+      <mesh
+        position={[0.1, -0.04, 0.04]}
+        rotation={[-0.1, 0, -0.05]}
+        castShadow
+      >
+        <cylinderGeometry args={[0.04, 0.032, 0.4, 6]} />
+        {boneMat}
+      </mesh>
+      {/* Feet bones */}
+      <mesh position={[-0.1, -0.28, 0.06]}>
+        <boxGeometry args={[0.1, 0.06, 0.18]} />
+        {boneMat}
+      </mesh>
+      <mesh position={[0.1, -0.28, 0.06]}>
+        <boxGeometry args={[0.1, 0.06, 0.18]} />
+        {boneMat}
+      </mesh>
+
+      {/* ── Wings ── animated via wingRefs */}
+      <mesh
+        ref={(el) => setWingRefs(el, rightWingRef.current)}
+        position={[-1.2, 1.1, -0.15]}
+        rotation={[0.15, 0.15, -0.45]}
+        castShadow
+      >
+        <planeGeometry args={[2.2, 1.4]} />
         {wingMat}
       </mesh>
       <mesh
         ref={(el) => setWingRefs(leftWingRef.current, el)}
-        position={[1.4, 1.1, -0.15]}
-        rotation={[0.15, -0.15, 0.5]}
+        position={[1.2, 1.1, -0.15]}
+        rotation={[0.15, -0.15, 0.45]}
         castShadow
       >
-        <planeGeometry args={[2.4, 1.5]} />
+        <planeGeometry args={[2.2, 1.4]} />
         {wingMat}
       </mesh>
 
-      {/* Claw-hands */}
-      <mesh position={[-0.6, 0.6, 0.4]} rotation={[0.3, 0, -0.4]}>
-        <capsuleGeometry args={[0.1, 0.4, 4, 6]} />
-        {bodyMat}
-      </mesh>
-      <mesh position={[0.6, 0.6, 0.4]} rotation={[0.3, 0, 0.4]}>
-        <capsuleGeometry args={[0.1, 0.4, 4, 6]} />
-        {bodyMat}
-      </mesh>
-
-      {/* Cyan body glow */}
+      {/* Eerie bone glow */}
       <pointLight
-        color="#7700ff"
-        intensity={0.8}
+        color="#aa00ff"
+        intensity={0.9}
         distance={5}
         position={[0, 1, 0]}
       />
 
       {/* HP bar */}
-      <group position={[0, 3.0, 0]}>
+      <group position={[0, 2.2, 0]}>
         <mesh>
-          <planeGeometry args={[1.1, 0.1]} />
+          <planeGeometry args={[1.0, 0.1]} />
           <meshBasicMaterial color="#220033" />
         </mesh>
-        <mesh position={[(hpFrac - 1) * 0.55, 0, 0.001]}>
-          <planeGeometry args={[1.1 * hpFrac, 0.08]} />
+        <mesh position={[(hpFrac - 1) * 0.5, 0, 0.001]}>
+          <planeGeometry args={[1.0 * hpFrac, 0.08]} />
           <meshBasicMaterial color="#aa00ff" />
         </mesh>
       </group>
@@ -686,7 +728,6 @@ function EnemyMesh({
     );
   }
 
-  // Alien Demon
   return (
     <group
       ref={onRef}

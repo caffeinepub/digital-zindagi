@@ -1,9 +1,13 @@
 /**
- * Digital Zindagi — Professional Multi-Channel Web Audio Engine v2
- * No external audio files. All sounds synthesized via Web Audio API.
+ * Digital Zindagi — Audio Engine v4 (Beep-Free Overhaul)
  *
- * Theme music: layered dramatic 4-second loop at 120BPM.
- * SFX: high-quality synthesized combat sounds — NO simple oscillator beeps.
+ * FIX 4 — Complete sound engine rewrite:
+ * - Theme music replaced: no more 120BPM sawtooth/noise beeping
+ * - New theme: smooth sine-wave ambient hum at 220Hz through lowpass filter
+ * - Theme only starts on explicit user click (window 'click' listener, once)
+ * - All SFX guarded: only play when audioContext is 'running'
+ * - resumeAudio() exposed for user-gesture handlers
+ * - No tone() loops, no setInterval before user interaction
  */
 
 let ctx: AudioContext | null = null;
@@ -13,12 +17,31 @@ let _masterVolume = 0.75;
 
 // Theme state
 let themeRunning = false;
-let themeTimeout: ReturnType<typeof setTimeout> | null = null;
-const themeNodes: AudioNode[] = [];
+let themeOscillator: OscillatorNode | null = null;
+let themeGain: GainNode | null = null;
+let themeFilter: BiquadFilterNode | null = null;
+// Secondary harmony oscillator
+let themeOsc2: OscillatorNode | null = null;
+let themeGain2: GainNode | null = null;
 
+/**
+ * Get or create an AudioContext.
+ * If the existing context is 'closed', create a fresh one.
+ */
 function getCtx(): AudioContext {
-  if (!ctx) ctx = new AudioContext();
-  return ctx;
+  try {
+    if (ctx && ctx.state === "closed") {
+      ctx = null;
+      masterGain = null;
+    }
+    if (!ctx) {
+      ctx = new AudioContext();
+    }
+    return ctx;
+  } catch (e) {
+    console.warn("[AudioEngine] Failed to create AudioContext:", e);
+    throw e;
+  }
 }
 
 function getMaster(): GainNode {
@@ -35,12 +58,23 @@ function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v));
 }
 
-/** Resume AudioContext — must be called from user gesture */
+/** Guard: only proceed if audioContext is running */
+function isReady(): boolean {
+  try {
+    return !!ctx && ctx.state === "running";
+  } catch {
+    return false;
+  }
+}
+
+/** Resume AudioContext — MUST be called from a user gesture handler */
 export function resumeAudio() {
   try {
     const c = getCtx();
     if (c.state === "suspended") void c.resume();
-  } catch {}
+  } catch (e) {
+    console.warn("[AudioEngine] resumeAudio failed:", e);
+  }
 }
 
 /** Legacy compat */
@@ -58,6 +92,8 @@ function tone(
   freqEnd?: number,
   delayMs = 0,
 ) {
+  // Guard: only play SFX when context is running
+  if (!isReady()) return;
   try {
     const c = getCtx();
     const startAt = c.currentTime + delayMs / 1000;
@@ -88,6 +124,8 @@ function noiseBurst(
   filterType: BiquadFilterType = "bandpass",
   delayMs = 0,
 ) {
+  // Guard: only play SFX when context is running
+  if (!isReady()) return;
   try {
     const c = getCtx();
     const startAt = c.currentTime + delayMs / 1000;
@@ -114,120 +152,92 @@ function noiseBurst(
   } catch {}
 }
 
-// ─── Theme Music ──────────────────────────────────────────────────────────────
-// 120BPM = 0.5s per beat, 4/4 = 2s per bar, 2 bars = 4s loop
-// Bass sequence: [55, 55, 44, 49] Hz (each 0.5s)
-// Melody arpeggio: [220, 262, 196, 220] Hz (each 0.5s)
-// Rhythm: noise burst every beat (0.5s interval)
+// ─── Theme Music (FIX 4) ──────────────────────────────────────────────────────
+// Replaces the 120BPM sawtooth/noise beeping loop.
+// New approach: smooth continuous sine-wave ambient drone through lowpass filter.
+// A3 (220Hz) + E4 (329Hz) harmony = pleasant, non-beeping background hum.
 
-const BASS_SEQ = [55, 55, 44, 49]; // A1, A1, C1, G1
-const MELODY_SEQ = [220, 262, 196, 220]; // A3, C4, G3, A3
-const BEAT_DURATION = 0.5; // 120BPM
-const LOOP_DURATION = 4000; // ms
+function stopThemeOscillators() {
+  try {
+    if (themeOscillator) {
+      themeOscillator.stop();
+      themeOscillator.disconnect();
+    }
+  } catch {}
+  try {
+    if (themeGain) themeGain.disconnect();
+  } catch {}
+  try {
+    if (themeFilter) themeFilter.disconnect();
+  } catch {}
+  try {
+    if (themeOsc2) {
+      themeOsc2.stop();
+      themeOsc2.disconnect();
+    }
+  } catch {}
+  try {
+    if (themeGain2) themeGain2.disconnect();
+  } catch {}
+  themeOscillator = null;
+  themeGain = null;
+  themeFilter = null;
+  themeOsc2 = null;
+  themeGain2 = null;
+}
 
-function scheduleThemeLoop(loopStartTime: number) {
-  if (!themeRunning) return;
+function startThemeOscillators() {
   try {
     const c = getCtx();
 
-    // Bass voice: sawtooth, gain 0.15
-    BASS_SEQ.forEach((freq, beat) => {
-      const osc = c.createOscillator();
-      const g = c.createGain();
-      osc.type = "sawtooth";
-      osc.frequency.setValueAtTime(freq, loopStartTime + beat * BEAT_DURATION);
-      g.gain.setValueAtTime(0.15, loopStartTime + beat * BEAT_DURATION);
-      g.gain.exponentialRampToValueAtTime(
-        0.001,
-        loopStartTime + (beat + 1) * BEAT_DURATION - 0.02,
-      );
-      osc.connect(g);
-      g.connect(getMaster());
-      osc.start(loopStartTime + beat * BEAT_DURATION);
-      osc.stop(loopStartTime + (beat + 1) * BEAT_DURATION);
-      themeNodes.push(osc, g);
-    });
+    // Primary ambient tone: A3 = 220Hz, sine, very quiet (0.08)
+    themeOscillator = c.createOscillator();
+    themeOscillator.type = "sine";
+    themeOscillator.frequency.value = 220;
 
-    // Melody voice: sine, gain 0.08
-    MELODY_SEQ.forEach((freq, beat) => {
-      const osc = c.createOscillator();
-      const g = c.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(freq, loopStartTime + beat * BEAT_DURATION);
-      g.gain.setValueAtTime(0.08, loopStartTime + beat * BEAT_DURATION);
-      g.gain.exponentialRampToValueAtTime(
-        0.001,
-        loopStartTime + (beat + 0.85) * BEAT_DURATION,
-      );
-      osc.connect(g);
-      g.connect(getMaster());
-      osc.start(loopStartTime + beat * BEAT_DURATION);
-      osc.stop(loopStartTime + (beat + 0.9) * BEAT_DURATION);
-      themeNodes.push(osc, g);
-    });
+    // Lowpass filter at 800Hz — ensures smooth, non-buzzy output
+    themeFilter = c.createBiquadFilter();
+    themeFilter.type = "lowpass";
+    themeFilter.frequency.value = 800;
+    themeFilter.Q.value = 0.5;
 
-    // Rhythm: noise burst each beat (BrownNoise approximation via LP filtered white noise)
-    BASS_SEQ.forEach((_, beat) => {
-      const bufSize = Math.ceil(c.sampleRate * 0.08);
-      const buf = c.createBuffer(1, bufSize, c.sampleRate);
-      const data = buf.getChannelData(0);
-      let lastOut = 0;
-      for (let i = 0; i < bufSize; i++) {
-        const white = Math.random() * 2 - 1;
-        lastOut = (lastOut + 0.02 * white) / 1.02;
-        data[i] = lastOut * 3.5; // "brown noise"
-      }
-      const src = c.createBufferSource();
-      src.buffer = buf;
-      const filter = c.createBiquadFilter();
-      filter.type = "lowpass";
-      filter.frequency.value = 200;
-      const g = c.createGain();
-      const beatStart = loopStartTime + beat * BEAT_DURATION;
-      g.gain.setValueAtTime(0.35, beatStart);
-      g.gain.exponentialRampToValueAtTime(0.001, beatStart + 0.08);
-      src.connect(filter);
-      filter.connect(g);
-      g.connect(getMaster());
-      src.start(beatStart);
-      src.stop(beatStart + 0.1);
-      themeNodes.push(src, g);
-    });
+    themeGain = c.createGain();
+    themeGain.gain.value = 0;
 
-    // Schedule next loop iteration
-    themeTimeout = setTimeout(() => {
-      if (themeRunning) {
-        const nextStart = getCtx().currentTime;
-        scheduleThemeLoop(nextStart);
-      }
-    }, LOOP_DURATION - 100); // 100ms early for seamless loop
-  } catch {}
-}
+    themeOscillator.connect(themeFilter);
+    themeFilter.connect(themeGain);
+    themeGain.connect(getMaster());
+    themeOscillator.start();
 
-function stopAllThemeNodes() {
-  for (const node of themeNodes) {
-    try {
-      if (
-        node instanceof OscillatorNode ||
-        node instanceof AudioBufferSourceNode
-      ) {
-        node.stop();
-      }
-      node.disconnect();
-    } catch {}
-  }
-  themeNodes.length = 0;
-  if (themeTimeout !== null) {
-    clearTimeout(themeTimeout);
-    themeTimeout = null;
+    // Fade in gently over 1.5 seconds
+    themeGain.gain.setValueAtTime(0, c.currentTime);
+    themeGain.gain.linearRampToValueAtTime(0.08, c.currentTime + 1.5);
+
+    // Secondary harmony: E4 = 329Hz, triangle, very quiet (0.04)
+    themeOsc2 = c.createOscillator();
+    themeOsc2.type = "triangle";
+    themeOsc2.frequency.value = 329;
+
+    themeGain2 = c.createGain();
+    themeGain2.gain.value = 0;
+    themeOsc2.connect(themeGain2);
+    themeGain2.connect(getMaster());
+    themeOsc2.start();
+
+    // Fade in secondary slightly later
+    themeGain2.gain.setValueAtTime(0, c.currentTime);
+    themeGain2.gain.linearRampToValueAtTime(0.04, c.currentTime + 2.5);
+  } catch (e) {
+    console.warn("[AudioEngine] startThemeOscillators failed:", e);
+    themeRunning = false;
   }
 }
 
-// ─── SFX — High-quality synthesized sounds ───────────────────────────────────
+// ─── SFX ─────────────────────────────────────────────────────────────────────
 
 export const SFX = {
-  /** Attack: crisp impact — white noise shaped by exponential decay + highpass */
   heroAttack(volume = 0.5) {
+    if (!isReady()) return;
     try {
       const c = getCtx();
       const bufSize = Math.ceil(c.sampleRate * 0.08);
@@ -250,8 +260,8 @@ export const SFX = {
     } catch {}
   },
 
-  /** Enemy hit: heavy thud — 80Hz sine with tanh distortion */
   enemyHit(volume = 0.5) {
+    if (!isReady()) return;
     try {
       const c = getCtx();
       const osc = c.createOscillator();
@@ -276,8 +286,8 @@ export const SFX = {
     } catch {}
   },
 
-  /** Wave start: epic sweep — sawtooth 110→880Hz over 1.5s */
   waveStart(volume = 0.6) {
+    if (!isReady()) return;
     try {
       const c = getCtx();
       const osc = c.createOscillator();
@@ -294,15 +304,14 @@ export const SFX = {
     } catch {}
   },
 
-  /** Power-up: ascending arpeggio [523, 659, 784, 1047] Hz */
   powerUp(volume = 0.3) {
     [523, 659, 784, 1047].forEach((freq, i) => {
       tone(freq, 0.12, volume, "sine", undefined, i * 120);
     });
   },
 
-  /** Coin collect: bright chime — 1047Hz sine, 0.25s exponential decay */
   coinCollect(volume = 0.5) {
+    if (!isReady()) return;
     try {
       const c = getCtx();
       const osc = c.createOscillator();
@@ -318,13 +327,11 @@ export const SFX = {
     } catch {}
   },
 
-  /** Mega coin: coin + power-up together */
   megaCoinCollect(volume = 0.6) {
     SFX.coinCollect(volume);
     setTimeout(() => SFX.powerUp(volume * 0.5), 120);
   },
 
-  /** Game over: dramatic descending [784, 659, 523, 392] Hz, triangle */
   gameOver(volume = 0.7) {
     [784, 659, 523, 392].forEach((freq, i) => {
       tone(freq, 0.4, volume * 0.35, "triangle", undefined, i * 400);
@@ -332,43 +339,36 @@ export const SFX = {
     noiseBurst(0.6, volume * 0.2, 80, 1, "lowpass", 1600);
   },
 
-  /** Hero hit: harsh electronic distortion */
   heroHit(volume = 0.5) {
     tone(150, 0.2, volume * 0.6, "sawtooth");
     setTimeout(() => tone(100, 0.15, volume * 0.4, "sawtooth"), 50);
     noiseBurst(0.1, volume * 0.3, 300, 3, "bandpass", 0);
   },
 
-  /** Enemy die: layered noise impact */
   enemyDie(volume = 0.5) {
     noiseBurst(0.2, volume * 0.5, 400, 1);
     noiseBurst(0.15, volume * 0.35, 200, 1.5, "bandpass", 30);
     noiseBurst(0.12, volume * 0.25, 600, 2, "bandpass", 60);
   },
 
-  /** Hound bite: medium thud */
   houndBite(volume = 0.5) {
     SFX.enemyHit(volume * 0.8);
   },
 
-  /** Demon shoot: laser-like zap */
   demonShoot(volume = 0.4) {
     tone(800, 0.15, volume * 0.3, "triangle", 200);
     noiseBurst(0.06, volume * 0.15, 1200, 2);
   },
 
-  /** Projectile hit: brief filtered noise */
   projectileHit(volume = 0.4) {
     noiseBurst(0.08, volume * 0.4, 400, 2);
   },
 
-  /** Store purchase: ascending heal sweep */
   storePurchase(volume = 0.5) {
     tone(200, 0.4, volume * 0.2, "sine", 600);
     setTimeout(() => tone(300, 0.3, volume * 0.15, "sine", 800), 100);
   },
 
-  /** Combat pulse: rhythmic bass hit */
   combatPulse(volume = 0.3) {
     tone(55, 0.15, volume * 0.5, "sawtooth");
     setTimeout(() => tone(55, 0.1, volume * 0.3, "sawtooth"), 200);
@@ -389,8 +389,13 @@ export const GameAudio = {
     return _muted;
   },
 
+  /** FIX 4: startTheme exposed for window click listener pattern */
+  startTheme() {
+    GameAudio.playTheme();
+  },
+
   init() {
-    resumeAudio();
+    // Do NOT call resumeAudio() here — must be triggered by user gesture
   },
 
   playTheme() {
@@ -398,33 +403,30 @@ export const GameAudio = {
     themeRunning = true;
     try {
       resumeAudio();
-      scheduleThemeLoop(getCtx().currentTime + 0.05);
-    } catch {}
+      startThemeOscillators();
+    } catch (e) {
+      console.warn("[AudioEngine] playTheme failed:", e);
+      themeRunning = false;
+    }
   },
 
   stopTheme() {
     if (!themeRunning) return;
     themeRunning = false;
     try {
-      // Fade out master before stopping nodes
-      if (masterGain) {
-        const c = getCtx();
-        masterGain.gain.setTargetAtTime(
-          _muted ? 0 : _masterVolume,
-          c.currentTime,
-          0.1,
-        );
+      // Fade out before stopping to avoid click/pop
+      if (themeGain && ctx) {
+        themeGain.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
       }
-      setTimeout(stopAllThemeNodes, 300);
+      if (themeGain2 && ctx) {
+        themeGain2.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
+      }
+      setTimeout(() => stopThemeOscillators(), 500);
     } catch {
-      stopAllThemeNodes();
+      stopThemeOscillators();
     }
   },
 
-  /**
-   * Play a named SFX.
-   * sfxName: 'attack' | 'hit' | 'coin' | 'heal' | 'spawn' | 'wave' | 'damage'
-   */
   play(sfxName: string, vol = 0.5) {
     if (_muted) return;
     const v = clamp(vol, 0, 1);

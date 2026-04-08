@@ -36,6 +36,12 @@ export interface GameState {
   damageMultiplier: number;
   shieldActive: boolean;
 
+  // Spawn invincibility — prevents immediate death on game start
+  spawnInvincible: boolean;
+
+  // Checkpoint system
+  checkpointWave: number;
+
   // Weapon system
   currentWeapon: WeaponType;
   setWeapon: (weapon: WeaponType) => void;
@@ -61,6 +67,11 @@ export interface GameState {
   setVolume: (v: number) => void;
   nextWave: () => void;
   resetGame: () => void;
+  /** Restart from the saved checkpoint wave — does NOT reset to start screen */
+  restartFromCheckpoint: () => void;
+  /** Save current wave as checkpoint */
+  saveCheckpoint: (wave: number) => void;
+  setSpawnInvincible: (val: boolean) => void;
 }
 
 const STORAGE_HIGH_SCORE = "dz_game_high_score";
@@ -68,6 +79,7 @@ const STORAGE_HERO_FACE = "dz_game_hero_face";
 const STORAGE_COINS = "dz_game_coins_session";
 const STORAGE_VOLUME = "dz_game_volume";
 const STORAGE_WEAPON = "dz_game_weapon";
+const STORAGE_CHECKPOINT = "dz_game_checkpoint_wave";
 
 function loadInitial(): Omit<
   GameState,
@@ -87,6 +99,9 @@ function loadInitial(): Omit<
   | "setVolume"
   | "nextWave"
   | "resetGame"
+  | "restartFromCheckpoint"
+  | "saveCheckpoint"
+  | "setSpawnInvincible"
 > {
   return {
     heroHP: 100,
@@ -104,6 +119,8 @@ function loadInitial(): Omit<
     leaderboardVisible: false,
     damageMultiplier: 1,
     shieldActive: false,
+    spawnInvincible: false,
+    checkpointWave: Number(localStorage.getItem(STORAGE_CHECKPOINT) || "1"),
   };
 }
 
@@ -121,6 +138,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   damageHero: (dmg) =>
     set((s) => {
+      // FIX 2: Spawn invincibility — skip damage in first 2 seconds
+      if (s.spawnInvincible) return {};
       // Shield absorbs damage completely
       if (s.shieldActive) return { shieldActive: false };
       const heroHP = Math.max(0, s.heroHP - dmg);
@@ -208,13 +227,26 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   nextWave: () =>
-    set((s) => ({
-      waveCount: s.waveCount + 1,
-      heroHP: Math.min(s.heroMaxHP, s.heroHP + 30),
-      // Clear shield and multiplier at wave start for balance
-      shieldActive: false,
-    })),
+    set((s) => {
+      const nextWave = s.waveCount + 1;
+      // Auto-save checkpoint every wave
+      localStorage.setItem(STORAGE_CHECKPOINT, String(nextWave));
+      return {
+        waveCount: nextWave,
+        heroHP: Math.min(s.heroMaxHP, s.heroHP + 30),
+        shieldActive: false,
+        checkpointWave: nextWave,
+      };
+    }),
 
+  saveCheckpoint: (wave) => {
+    localStorage.setItem(STORAGE_CHECKPOINT, String(wave));
+    set({ checkpointWave: wave });
+  },
+
+  setSpawnInvincible: (val) => set({ spawnInvincible: val }),
+
+  /** Full reset — goes back to wave 1, used only on fresh new game */
   resetGame: () =>
     set({
       heroHP: 100,
@@ -224,7 +256,21 @@ export const useGameStore = create<GameState>((set, get) => ({
       gamePhase: "playing",
       damageMultiplier: 1,
       shieldActive: false,
+      spawnInvincible: true, // 2-second invincibility on spawn
     }),
+
+  /** FIX 3: Checkpoint restart — resumes from saved wave, not wave 1 */
+  restartFromCheckpoint: () =>
+    set((s) => ({
+      heroHP: 100,
+      partnerHP: [80, 80],
+      gamePhase: "playing",
+      damageMultiplier: 1,
+      shieldActive: false,
+      spawnInvincible: true, // 2-second invincibility on respawn
+      waveCount: Math.max(1, s.checkpointWave),
+      // Preserve score so the session continues
+    })),
 }));
 
 export function getHighScore(): number {

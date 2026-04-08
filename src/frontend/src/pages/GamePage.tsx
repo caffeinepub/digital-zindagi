@@ -1,6 +1,6 @@
 import { ArrowLeft, Play, RotateCcw, Trophy } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { GameCanvas } from "../game/GameCanvas";
 import { getHighScore, useGameStore } from "../game/stores/gameStore";
 import AttackButton from "../game/ui/AttackButton";
@@ -16,60 +16,6 @@ import {
   isHighScore,
 } from "../game/utils/leaderboard";
 import { Link, useNavigate } from "../lib/router";
-
-// ─── Rotate Warning Overlay ───────────────────────────────────────────────────
-
-function RotateWarning() {
-  return (
-    <div
-      className="fixed inset-0 flex flex-col items-center justify-center z-[9999] select-none"
-      style={{
-        background:
-          "linear-gradient(135deg, #064420 0%, #000 60%, #0a0a0a 100%)",
-      }}
-      data-ocid="rotate-warning"
-    >
-      <div
-        style={{
-          fontSize: 72,
-          animation: "dzSpin 2s ease-in-out infinite",
-          display: "inline-block",
-        }}
-      >
-        📱
-      </div>
-
-      <div
-        className="text-2xl font-black text-center mt-6 px-8"
-        style={{ color: "#00ff88", textShadow: "0 0 20px #00ff88" }}
-      >
-        Please rotate your device
-        <br />
-        to play Digital Zindagi 🔄
-      </div>
-      <div
-        className="text-base font-semibold text-center mt-3 px-8"
-        style={{ color: "#f0c040", textShadow: "0 0 10px #f0c040" }}
-      >
-        डिजिटल ज़िंदगी खेलने के लिए फोन घुमाएँ
-      </div>
-
-      <div className="mt-8 opacity-60" style={{ color: "#aaa", fontSize: 14 }}>
-        🎮 Digital Zindagi — Real Human
-      </div>
-
-      <style>{`
-        @keyframes dzSpin {
-          0%   { transform: rotate(0deg); }
-          25%  { transform: rotate(90deg); }
-          50%  { transform: rotate(90deg); }
-          75%  { transform: rotate(0deg); }
-          100% { transform: rotate(0deg); }
-        }
-      `}</style>
-    </div>
-  );
-}
 
 // ─── WhatsApp Share helper ────────────────────────────────────────────────────
 
@@ -91,7 +37,9 @@ export default function GamePage() {
     gamePhase,
     currentWeapon,
     resetGame,
+    restartFromCheckpoint,
     setWeapon,
+    setSpawnInvincible,
     volume,
     leaderboardVisible,
     setLeaderboardVisible,
@@ -100,11 +48,12 @@ export default function GamePage() {
   const navigate = useNavigate();
   const keys = useRef<Set<string>>(new Set());
   const joystick = useRef({ x: 0, y: 0 });
-  const [showRotateWarning, setShowRotateWarning] = useState(false);
-  const [latestEntry, setLatestEntry] = useState<LeaderboardEntry | null>(null);
+  const latestEntryRef = useRef<LeaderboardEntry | null>(null);
   const gameOverHandled = useRef(false);
+  // Guard: ensure audio only starts on explicit user gesture
+  const audioStarted = useRef(false);
 
-  // ── Keyboard handlers
+  // ── Keyboard handlers — with proper cleanup
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       keys.current.add(e.code);
@@ -119,123 +68,86 @@ export default function GamePage() {
     };
   }, []);
 
-  // ── Landscape lock + fullscreen + rotate warning
+  // ── Prevent body scroll during game (mobile rubber-band fix)
   useEffect(() => {
-    function checkOrientation() {
-      const isPortrait = window.innerWidth < window.innerHeight;
-      setShowRotateWarning(isPortrait);
-    }
-
-    checkOrientation();
-    window.addEventListener("orientationchange", checkOrientation);
-    if (screen.orientation) {
-      screen.orientation.addEventListener("change", checkOrientation);
-    }
-    window.addEventListener("resize", checkOrientation);
-
+    const prev = document.body.style.overscrollBehavior;
+    document.body.style.overscrollBehavior = "none";
     return () => {
-      window.removeEventListener("orientationchange", checkOrientation);
-      if (screen.orientation) {
-        screen.orientation.removeEventListener("change", checkOrientation);
-      }
-      window.removeEventListener("resize", checkOrientation);
-
-      // Exit fullscreen on unmount
-      try {
-        if (document.fullscreenElement) {
-          void document.exitFullscreen();
-        }
-      } catch {}
-
-      // Release orientation lock
-      try {
-        (
-          screen.orientation as ScreenOrientation & { unlock?: () => void }
-        ).unlock?.();
-      } catch {}
+      document.body.style.overscrollBehavior = prev;
     };
   }, []);
-
-  // ── Request fullscreen + landscape lock when game starts playing
-  useEffect(() => {
-    if (gamePhase !== "playing") return;
-
-    const el = document.documentElement;
-    try {
-      if (el.requestFullscreen) {
-        void el.requestFullscreen();
-      } else if (
-        (el as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> })
-          .webkitRequestFullscreen
-      ) {
-        void (
-          el as HTMLElement & { webkitRequestFullscreen: () => Promise<void> }
-        ).webkitRequestFullscreen();
-      }
-    } catch {}
-
-    try {
-      void (
-        screen.orientation as ScreenOrientation & {
-          lock?: (o: string) => Promise<void>;
-        }
-      ).lock?.("landscape");
-    } catch {}
-  }, [gamePhase]);
-
-  // ── Theme music when playing
-  useEffect(() => {
-    if (gamePhase === "playing") {
-      resumeAudio();
-      GameAudio.playTheme();
-      GameAudio.setMasterVolume(volume);
-    } else {
-      GameAudio.stopTheme();
-    }
-    return () => {
-      GameAudio.stopTheme();
-    };
-  }, [gamePhase, volume]);
 
   // ── Add to leaderboard on game over
   useEffect(() => {
     if (gamePhase === "gameover" && !gameOverHandled.current && score > 0) {
       gameOverHandled.current = true;
       const entry = addLeaderboardScore(score, waveCount);
-      setLatestEntry(entry);
+      latestEntryRef.current = entry;
       SFX.gameOver(volume);
+      // Stop theme music on game over
+      GameAudio.stopTheme();
+      audioStarted.current = false;
       if (isHighScore(score)) {
         setTimeout(() => setLeaderboardVisible(true), 1200);
       }
     }
     if (gamePhase === "playing") {
       gameOverHandled.current = false;
-      setLatestEntry(null);
+      latestEntryRef.current = null;
     }
   }, [gamePhase, score, waveCount, setLeaderboardVisible, volume]);
 
+  // ── Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      GameAudio.stopTheme();
+      audioStarted.current = false;
+    };
+  }, []);
+
+  // ── Start game — audio triggered only here (user gesture)
   const handleStartGame = useCallback(() => {
+    // Resume / create audio context from user gesture
     resumeAudio();
-    SFX.waveStart(volume);
-    // (1) request fullscreen, (2) lock landscape, (3) reset game → playing
-    const el = document.documentElement;
-    try {
-      if (el.requestFullscreen) void el.requestFullscreen();
-    } catch {}
-    try {
-      void (
-        screen.orientation as ScreenOrientation & {
-          lock?: (o: string) => Promise<void>;
-        }
-      ).lock?.("landscape");
-    } catch {}
+
+    // FIX 4: Start theme on first click — once pattern
+    if (!audioStarted.current) {
+      audioStarted.current = true;
+      // Small delay so context is running before we start
+      setTimeout(() => {
+        GameAudio.playTheme();
+        GameAudio.setMasterVolume(volume);
+      }, 300);
+    }
+
     resetGame();
-  }, [resetGame, volume]);
+
+    // FIX 2: Spawn invincibility — clear after 2 seconds
+    setTimeout(() => {
+      setSpawnInvincible(false);
+    }, 2000);
+  }, [resetGame, setSpawnInvincible, volume]);
 
   const handleRestart = useCallback(() => {
-    SFX.waveStart(volume);
-    resetGame();
-  }, [resetGame, volume]);
+    resumeAudio();
+
+    // FIX 3: Restart from checkpoint, not from scratch
+    restartFromCheckpoint();
+
+    // Restart theme if not running
+    if (!audioStarted.current) {
+      audioStarted.current = true;
+      setTimeout(() => {
+        GameAudio.playTheme();
+        GameAudio.setMasterVolume(volume);
+      }, 300);
+    }
+
+    // FIX 2: Spawn invincibility — clear after 2 seconds
+    setTimeout(() => {
+      setSpawnInvincible(false);
+    }, 2000);
+  }, [restartFromCheckpoint, setSpawnInvincible, volume]);
 
   const handleJoystickMove = useCallback((x: number, y: number) => {
     joystick.current = { x, y };
@@ -251,23 +163,23 @@ export default function GamePage() {
   }, []);
 
   const handleGoHome = useCallback(() => {
-    try {
-      if (document.fullscreenElement) void document.exitFullscreen();
-    } catch {}
+    GameAudio.stopTheme();
+    audioStarted.current = false;
     navigate("/");
   }, [navigate]);
 
   return (
     <div
       className="fixed inset-0 overflow-hidden"
-      style={{ background: "#020503", touchAction: "none" }}
+      style={{
+        background: "#020503",
+        touchAction: "none",
+        willChange: "transform",
+      }}
       data-ocid="game-page"
     >
-      {/* Rotate warning — highest z-index */}
-      {showRotateWarning && <RotateWarning />}
-
-      {/* 3D Canvas layer — always rendered for pre-loading */}
-      <div className="absolute inset-0">
+      {/* 3D Canvas layer — ALWAYS rendered, never unmounted */}
+      <div className="absolute inset-0" style={{ willChange: "transform" }}>
         <GameCanvas keys={keys} joystick={joystick} />
       </div>
 
@@ -277,22 +189,23 @@ export default function GamePage() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 flex flex-col items-center justify-center z-20 overflow-y-auto"
+            exit={{ opacity: 0, transition: { duration: 0.3 } }}
+            className="absolute inset-0 z-20 overflow-y-auto"
             style={{
-              backgroundImage:
-                "url(/assets/generated/game-scene-bg.dim_1920x1080.jpg)",
-              backgroundSize: "cover",
-              backgroundPosition: "center",
+              background:
+                "linear-gradient(135deg, #0a0a0a 0%, #1a0500 40%, #050a08 80%, #0a0a1a 100%)",
             }}
           >
-            {/* Dark cinematic overlay */}
+            {/* Cinematic overlay grid texture */}
             <div
-              className="absolute inset-0"
-              style={{ background: "rgba(0,0,0,0.82)" }}
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                backgroundImage:
+                  "radial-gradient(circle at 50% 30%, rgba(0,255,136,0.07) 0%, transparent 60%)",
+              }}
             />
 
-            <div className="relative z-10 flex flex-col items-center gap-4 px-5 py-6 max-w-sm w-full">
+            <div className="relative z-10 flex flex-col items-center gap-4 px-5 py-6 min-h-full max-w-sm mx-auto">
               {/* Back to home */}
               <button
                 type="button"
@@ -309,7 +222,7 @@ export default function GamePage() {
               <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                transition={{ delay: 0.15 }}
+                transition={{ delay: 0.1 }}
                 className="text-center"
               >
                 <div
@@ -367,30 +280,52 @@ export default function GamePage() {
                 className="w-full"
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
+                transition={{ delay: 0.25 }}
               >
                 <PhotoUpload />
               </motion.div>
 
-              {/* Weapon selection — 3 cards */}
+              {/* Weapon selection */}
               <motion.div
                 className="w-full"
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
+                transition={{ delay: 0.35 }}
               >
                 <WeaponSelect selected={currentWeapon} onSelect={setWeapon} />
               </motion.div>
 
-              {/* Play CTA */}
+              {/* ── BIG START BUTTON ── */}
               <motion.button
                 type="button"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.45, type: "spring", bounce: 0.3 }}
                 whileTap={{ scale: 0.96 }}
                 onClick={handleStartGame}
-                className="game-cta-gold w-full py-4 rounded-2xl text-xl font-black flex items-center justify-center gap-2"
+                className="w-full rounded-2xl font-black flex items-center justify-center gap-3"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #064420 0%, #0a6632 50%, #064420 100%)",
+                  border: "2px solid #f0c040",
+                  color: "#ffffff",
+                  fontSize: "22px",
+                  minHeight: "60px",
+                  boxShadow:
+                    "0 0 24px rgba(0,255,136,0.3), 0 4px 16px rgba(0,0,0,0.6)",
+                  letterSpacing: "0.5px",
+                  textShadow: "0 1px 4px rgba(0,0,0,0.8)",
+                }}
                 data-ocid="start-game-btn"
               >
-                <Play size={22} fill="currentColor" />▶ Shuru Karo!
+                <Play size={24} fill="currentColor" />
+                <span>
+                  🔥 Start Game
+                  <br />
+                  <span style={{ fontSize: "16px", opacity: 0.9 }}>
+                    गेम शुरू करें
+                  </span>
+                </span>
               </motion.button>
 
               <div
@@ -404,6 +339,9 @@ export default function GamePage() {
                   Joystick = Chalo • Red Button = Attack
                 </span>
               </div>
+
+              {/* Spacer for safe-area on notched phones */}
+              <div className="h-4" />
             </div>
           </motion.div>
         )}
@@ -555,7 +493,7 @@ export default function GamePage() {
         {leaderboardVisible && (
           <Leaderboard
             onClose={() => setLeaderboardVisible(false)}
-            latestEntry={latestEntry}
+            latestEntry={latestEntryRef.current}
           />
         )}
       </AnimatePresence>

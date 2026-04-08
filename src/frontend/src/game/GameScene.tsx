@@ -15,6 +15,7 @@ import {
 } from "./entities/Environment";
 import { Hero } from "./entities/Hero";
 import { Partners } from "./entities/Partners";
+import { useGameStore } from "./stores/gameStore";
 
 interface GameSceneProps {
   keys: React.MutableRefObject<Set<string>>;
@@ -42,6 +43,11 @@ function CameraFollow({
   return null;
 }
 
+/**
+ * GameScene is ALWAYS mounted (never conditionally unmounted).
+ * Entities check gamePhase themselves via useGameStore.getState().
+ * This prevents the crash loop caused by Canvas/Scene re-initialization.
+ */
 export function GameScene({ keys, joystick }: GameSceneProps) {
   const heroPosition = useRef(new THREE.Vector3(0, 0, 3));
   const enemyRefs = useRef<EnemyRef[]>([]);
@@ -59,6 +65,7 @@ export function GameScene({ keys, joystick }: GameSceneProps) {
       <SceneLighting />
       <CameraFollow target={heroPosition} />
 
+      {/* Environment — always visible (atmospheric background) */}
       <Ground />
       <Debris />
       <Skeletons />
@@ -67,6 +74,7 @@ export function GameScene({ keys, joystick }: GameSceneProps) {
       <CityRuins />
       <GiantDZLogo />
 
+      {/* Gameplay entities */}
       <Hero
         onPositionChange={handleHeroPositionChange}
         keys={keys}

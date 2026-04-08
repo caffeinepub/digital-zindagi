@@ -1,5 +1,5 @@
 import { useFrame } from "@react-three/fiber";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { type WeaponType, useGameStore } from "../stores/gameStore";
 import { SFX } from "../utils/audioEngine";
@@ -11,21 +11,18 @@ interface HeroProps {
   joystick: React.MutableRefObject<{ x: number; y: number }>;
 }
 
-/** Per-weapon attack cooldown in seconds — rifle fast, shotgun medium, plasma slow */
 const WEAPON_COOLDOWN: Record<WeaponType, number> = {
   rifle: 0.4,
   shotgun: 0.7,
   plasma: 1.2,
 };
 
-/** Per-weapon base damage */
 const WEAPON_DAMAGE: Record<WeaponType, number> = {
   rifle: 20,
   shotgun: 30,
   plasma: 45,
 };
 
-/** Read damage multiplier from localStorage (set by damage_boost upgrade) */
 function getDamageMultiplier(): number {
   try {
     const until = Number(localStorage.getItem("dz_damage_boost_until") || "0");
@@ -34,11 +31,25 @@ function getDamageMultiplier(): number {
   return 1.0;
 }
 
+// Skin tone and clothing colors
+const SKIN = "#C68642";
+const SKIN_DARK = "#A0622A";
+const TORSO_COLOR = "#1e3a1e"; // dark military olive
+const PANTS_COLOR = "#1a1a1a";
+const BOOT_COLOR = "#0a0a0a";
+const SLEEVE_COLOR = "#2d4a1e"; // olive sleeve
+
 export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
   const { heroHP, heroMaxHP, heroFace, currentWeapon } = useGameStore();
   const groupRef = useRef<THREE.Group>(null);
-  const weaponGroupRef = useRef<THREE.Group>(null);
   const weaponRef = useRef<THREE.Mesh>(null);
+
+  // Limb animation refs
+  const leftArmRef = useRef<THREE.Group>(null);
+  const rightArmRef = useRef<THREE.Group>(null);
+  const leftLegRef = useRef<THREE.Group>(null);
+  const rightLegRef = useRef<THREE.Group>(null);
+
   const velocity = useRef(new THREE.Vector3());
   const position = useRef(new THREE.Vector3(0, 0, 3));
   const [faceTexture, setFaceTexture] = useState<THREE.CanvasTexture | null>(
@@ -47,22 +58,33 @@ export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
   const attackCooldown = useRef(0);
   const isAttacking = useRef(false);
   const attackTime = useRef(0);
+  const walkTime = useRef(0);
+  const lastFaceRef = useRef<string | null>(null);
 
-  // Load face texture whenever heroFace changes
   useEffect(() => {
-    if (heroFace) {
-      createFaceTexture(heroFace, (tex) => setFaceTexture(tex));
-    } else {
-      createFaceTexture("", (tex) => setFaceTexture(tex));
-    }
+    const faceKey = heroFace || "default";
+    if (lastFaceRef.current === faceKey) return;
+    lastFaceRef.current = faceKey;
+    createFaceTexture(heroFace, (tex) => setFaceTexture(tex));
   }, [heroFace]);
+
+  // Stable face material using useMemo — only recreates when texture changes
+  const headMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        map: faceTexture ?? undefined,
+        color: faceTexture ? "#ffffff" : SKIN,
+        roughness: 0.5,
+        metalness: 0.05,
+      }),
+    [faceTexture],
+  );
 
   useFrame((_, delta) => {
     if (!groupRef.current) return;
     const store = useGameStore.getState();
     if (store.gamePhase !== "playing") return;
 
-    // Input
     const ks = keys.current;
     const joy = joystick.current;
     let dx = joy.x;
@@ -72,7 +94,6 @@ export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
     if (ks.has("KeyA") || ks.has("ArrowLeft")) dx -= 1;
     if (ks.has("KeyD") || ks.has("ArrowRight")) dx += 1;
 
-    // Normalize diagonal
     const len = Math.sqrt(dx * dx + dz * dz);
     if (len > 1) {
       dx /= len;
@@ -83,24 +104,30 @@ export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
     velocity.current.x = dx * speed;
     velocity.current.z = dz * speed;
 
-    // Move
     position.current.x += velocity.current.x * delta;
     position.current.z += velocity.current.z * delta;
-
-    // Clamp to arena
     position.current.x = Math.max(-20, Math.min(20, position.current.x));
     position.current.z = Math.max(-20, Math.min(20, position.current.z));
 
     groupRef.current.position.copy(position.current);
     groupRef.current.position.y = 0;
 
-    // Face movement direction
     if (len > 0.01) {
       const angle = Math.atan2(dx, dz);
       groupRef.current.rotation.y = angle;
     }
 
-    // Attack (Space) — weapon-specific cooldown
+    // Walk animation
+    const isMoving = len > 0.01;
+    if (isMoving) walkTime.current += delta * 8;
+
+    const swing = isMoving ? Math.sin(walkTime.current) * 0.5 : 0;
+    if (leftArmRef.current) leftArmRef.current.rotation.x = swing;
+    if (rightArmRef.current) rightArmRef.current.rotation.x = -swing;
+    if (leftLegRef.current) leftLegRef.current.rotation.x = -swing;
+    if (rightLegRef.current) rightLegRef.current.rotation.x = swing;
+
+    // Attack
     const weapon = store.currentWeapon;
     const cd = WEAPON_COOLDOWN[weapon];
     attackCooldown.current -= delta;
@@ -110,14 +137,11 @@ export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
       attackCooldown.current = cd;
       attackTime.current = 0;
       SFX.heroAttack(store.volume);
-      // Notify HUD cooldown bar
       window.dispatchEvent(new Event("dz_hero_attack"));
-      // Store damage (with boost multiplier) for GameScene enemy system
       const dmg = Math.round(WEAPON_DAMAGE[weapon] * getDamageMultiplier());
       localStorage.setItem("dz_weapon_dmg", String(dmg));
     }
 
-    // Attack animation
     if (isAttacking.current && weaponRef.current) {
       attackTime.current += delta;
       const t = attackTime.current / 0.3;
@@ -128,7 +152,6 @@ export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
       }
     }
 
-    // Notify position
     onPositionChange(position.current.clone());
   });
 
@@ -136,135 +159,236 @@ export function Hero({ onPositionChange, keys, joystick }: HeroProps) {
 
   return (
     <group ref={groupRef} position={[0, 0, 3]}>
-      {/* Body capsule */}
-      <mesh position={[0, 0.9, 0]} castShadow>
-        <capsuleGeometry args={[0.3, 1.0, 8, 16]} />
-        <meshStandardMaterial color="#1a4a2a" roughness={0.7} metalness={0.2} />
+      {/* ── HEAD ── */}
+      <mesh position={[0, 1.65, 0]} castShadow>
+        <sphereGeometry args={[0.25, 16, 16]} />
+        <primitive object={headMaterial} attach="material" />
       </mesh>
 
-      {/* Head — uses face texture if available, DZ fallback otherwise */}
-      <mesh position={[0, 1.85, 0]} castShadow>
-        <sphereGeometry args={[0.28, 16, 16]} />
+      {/* Ears */}
+      <mesh position={[-0.26, 1.65, 0]} castShadow>
+        <sphereGeometry args={[0.06, 8, 8]} />
+        <meshStandardMaterial color={SKIN_DARK} roughness={0.6} />
+      </mesh>
+      <mesh position={[0.26, 1.65, 0]} castShadow>
+        <sphereGeometry args={[0.06, 8, 8]} />
+        <meshStandardMaterial color={SKIN_DARK} roughness={0.6} />
+      </mesh>
+
+      {/* ── NECK ── */}
+      <mesh position={[0, 1.38, 0]} castShadow>
+        <cylinderGeometry args={[0.09, 0.1, 0.2, 10]} />
+        <meshStandardMaterial color={SKIN} roughness={0.5} />
+      </mesh>
+
+      {/* ── TORSO ── */}
+      <mesh position={[0, 1.05, 0]} castShadow>
+        <boxGeometry args={[0.5, 0.7, 0.28]} />
         <meshStandardMaterial
-          map={faceTexture ?? undefined}
-          color={faceTexture ? "#ffffff" : "#c8a070"}
-          roughness={0.6}
+          color={TORSO_COLOR}
+          roughness={0.8}
+          metalness={0.1}
         />
       </mesh>
 
-      {/* Helmet rim */}
-      <mesh position={[0, 1.95, 0]}>
-        <torusGeometry args={[0.29, 0.04, 8, 16]} />
-        <meshStandardMaterial color="#1a4a1a" metalness={0.6} roughness={0.4} />
-      </mesh>
-
-      {/* Armor chest plate */}
-      <mesh position={[0, 1.1, 0.28]} castShadow>
-        <boxGeometry args={[0.5, 0.4, 0.08]} />
-        <meshStandardMaterial color="#0d3018" metalness={0.5} roughness={0.5} />
+      {/* Chest plate detail */}
+      <mesh position={[0, 1.1, 0.145]} castShadow>
+        <boxGeometry args={[0.36, 0.45, 0.04]} />
+        <meshStandardMaterial color="#0d2610" metalness={0.5} roughness={0.5} />
       </mesh>
 
       {/* Shoulder pads */}
-      <mesh position={[-0.38, 1.3, 0]} castShadow>
-        <boxGeometry args={[0.16, 0.14, 0.22]} />
-        <meshStandardMaterial color="#0f3822" metalness={0.4} roughness={0.6} />
+      <mesh position={[-0.32, 1.35, 0]} castShadow>
+        <boxGeometry args={[0.18, 0.12, 0.24]} />
+        <meshStandardMaterial color="#0f3018" metalness={0.4} roughness={0.6} />
       </mesh>
-      <mesh position={[0.38, 1.3, 0]} castShadow>
-        <boxGeometry args={[0.16, 0.14, 0.22]} />
-        <meshStandardMaterial color="#0f3822" metalness={0.4} roughness={0.6} />
+      <mesh position={[0.32, 1.35, 0]} castShadow>
+        <boxGeometry args={[0.18, 0.12, 0.24]} />
+        <meshStandardMaterial color="#0f3018" metalness={0.4} roughness={0.6} />
       </mesh>
 
-      {/* ── Weapon (changes based on currentWeapon) ── */}
-      <group ref={weaponGroupRef} position={[0.4, 1.2, 0]}>
-        {currentWeapon === "rifle" && (
-          <mesh ref={weaponRef} castShadow rotation={[0, 0, 0.3]}>
-            <boxGeometry args={[0.08, 0.08, 0.7]} />
-            <meshStandardMaterial
-              color="#2a2a2a"
-              metalness={0.85}
-              roughness={0.2}
-            />
-          </mesh>
-        )}
+      {/* ── LEFT ARM ── */}
+      <group ref={leftArmRef} position={[-0.34, 1.25, 0]}>
+        {/* Upper arm */}
+        <mesh position={[0, -0.14, 0]} castShadow>
+          <cylinderGeometry args={[0.075, 0.065, 0.28, 8]} />
+          <meshStandardMaterial color={SLEEVE_COLOR} roughness={0.7} />
+        </mesh>
+        {/* Elbow joint */}
+        <mesh position={[0, -0.3, 0]} castShadow>
+          <sphereGeometry args={[0.07, 8, 8]} />
+          <meshStandardMaterial color={SKIN} roughness={0.5} />
+        </mesh>
+        {/* Lower arm */}
+        <mesh position={[0, -0.46, 0]} castShadow>
+          <cylinderGeometry args={[0.063, 0.055, 0.28, 8]} />
+          <meshStandardMaterial color={SKIN} roughness={0.5} />
+        </mesh>
+        {/* Hand */}
+        <mesh position={[0, -0.64, 0]} castShadow>
+          <sphereGeometry args={[0.07, 8, 8]} />
+          <meshStandardMaterial color={SKIN} roughness={0.5} />
+        </mesh>
+      </group>
 
-        {currentWeapon === "shotgun" && (
-          <group ref={weaponRef}>
-            <mesh castShadow rotation={[0, 0, 0.25]}>
-              <boxGeometry args={[0.12, 0.12, 0.5]} />
-              <meshStandardMaterial
-                color="#3a2010"
-                metalness={0.6}
-                roughness={0.4}
-              />
-            </mesh>
-            <mesh position={[0, -0.1, 0.05]} castShadow>
-              <boxGeometry args={[0.08, 0.06, 0.18]} />
-              <meshStandardMaterial
-                color="#5a3020"
-                metalness={0.3}
-                roughness={0.7}
-              />
-            </mesh>
-          </group>
-        )}
+      {/* ── RIGHT ARM (holds weapon) ── */}
+      <group ref={rightArmRef} position={[0.34, 1.25, 0]}>
+        {/* Upper arm */}
+        <mesh position={[0, -0.14, 0]} castShadow>
+          <cylinderGeometry args={[0.075, 0.065, 0.28, 8]} />
+          <meshStandardMaterial color={SLEEVE_COLOR} roughness={0.7} />
+        </mesh>
+        {/* Elbow joint */}
+        <mesh position={[0, -0.3, 0]} castShadow>
+          <sphereGeometry args={[0.07, 8, 8]} />
+          <meshStandardMaterial color={SKIN} roughness={0.5} />
+        </mesh>
+        {/* Lower arm */}
+        <mesh position={[0, -0.46, 0]} castShadow>
+          <cylinderGeometry args={[0.063, 0.055, 0.28, 8]} />
+          <meshStandardMaterial color={SKIN} roughness={0.5} />
+        </mesh>
+        {/* Hand */}
+        <mesh position={[0, -0.64, 0]} castShadow>
+          <sphereGeometry args={[0.07, 8, 8]} />
+          <meshStandardMaterial color={SKIN} roughness={0.5} />
+        </mesh>
 
-        {currentWeapon === "plasma" && (
-          <group ref={weaponRef}>
-            {/* Orb body */}
-            <mesh castShadow>
-              <sphereGeometry args={[0.15, 12, 12]} />
+        {/* ── WEAPON attached to right hand ── */}
+        <group position={[0.08, -0.68, 0.1]} rotation={[-0.3, 0, 0]}>
+          {currentWeapon === "rifle" && (
+            <mesh ref={weaponRef} castShadow>
+              <boxGeometry args={[0.08, 0.08, 0.7]} />
               <meshStandardMaterial
-                color="#001a33"
-                metalness={0.9}
-                roughness={0.1}
-                emissive="#0088cc"
-                emissiveIntensity={1.5}
+                color="#2a2a2a"
+                metalness={0.85}
+                roughness={0.2}
               />
             </mesh>
-            {/* Energy core */}
-            <mesh>
-              <sphereGeometry args={[0.08, 8, 8]} />
-              <meshStandardMaterial
-                color="#00c8ff"
-                emissive="#00c8ff"
-                emissiveIntensity={4}
-              />
-            </mesh>
-            <pointLight color="#00c8ff" intensity={2} distance={5} />
-          </group>
-        )}
+          )}
 
-        {/* Fallback */}
-        {!["rifle", "shotgun", "plasma"].includes(currentWeapon) && (
-          <>
-            <mesh rotation={[0, 0, 0.3]} castShadow ref={weaponRef}>
-              <cylinderGeometry args={[0.04, 0.04, 1.4, 8]} />
+          {currentWeapon === "shotgun" && (
+            <group ref={weaponRef}>
+              <mesh castShadow>
+                <boxGeometry args={[0.13, 0.12, 0.52]} />
+                <meshStandardMaterial
+                  color="#3a2010"
+                  metalness={0.6}
+                  roughness={0.4}
+                />
+              </mesh>
+              <mesh position={[0, -0.1, 0.05]} castShadow>
+                <boxGeometry args={[0.08, 0.06, 0.18]} />
+                <meshStandardMaterial
+                  color="#5a3020"
+                  metalness={0.3}
+                  roughness={0.7}
+                />
+              </mesh>
+            </group>
+          )}
+
+          {currentWeapon === "plasma" && (
+            <group ref={weaponRef}>
+              <mesh castShadow>
+                <sphereGeometry args={[0.14, 12, 12]} />
+                <meshStandardMaterial
+                  color="#001a33"
+                  metalness={0.9}
+                  roughness={0.1}
+                  emissive="#0088cc"
+                  emissiveIntensity={1.5}
+                />
+              </mesh>
+              <mesh>
+                <sphereGeometry args={[0.08, 8, 8]} />
+                <meshStandardMaterial
+                  color="#00c8ff"
+                  emissive="#00c8ff"
+                  emissiveIntensity={4}
+                />
+              </mesh>
+              <pointLight color="#00c8ff" intensity={2} distance={5} />
+            </group>
+          )}
+
+          {!["rifle", "shotgun", "plasma"].includes(currentWeapon) && (
+            <mesh ref={weaponRef} castShadow>
+              <boxGeometry args={[0.07, 0.07, 0.65]} />
               <meshStandardMaterial
                 color="#1a5a30"
                 metalness={0.7}
                 roughness={0.3}
               />
             </mesh>
-            <mesh position={[0.35, 0.7, 0]}>
-              <sphereGeometry args={[0.1, 8, 8]} />
-              <meshStandardMaterial
-                color="#00ff88"
-                emissive="#00ff88"
-                emissiveIntensity={3}
-              />
-            </mesh>
-            <pointLight
-              position={[0.35, 0.7, 0]}
-              color="#00ff88"
-              intensity={1.5}
-              distance={4}
-            />
-          </>
-        )}
+          )}
+        </group>
       </group>
 
-      {/* HP bar (3D plane above head) */}
-      <group position={[0, 2.5, 0]}>
+      {/* ── BELT / WAIST ── */}
+      <mesh position={[0, 0.68, 0]} castShadow>
+        <boxGeometry args={[0.52, 0.1, 0.3]} />
+        <meshStandardMaterial color="#0d0d0d" metalness={0.6} roughness={0.4} />
+      </mesh>
+
+      {/* ── LEFT LEG ── */}
+      <group ref={leftLegRef} position={[-0.14, 0.6, 0]}>
+        {/* Upper leg */}
+        <mesh position={[0, -0.22, 0]} castShadow>
+          <cylinderGeometry args={[0.1, 0.085, 0.44, 8]} />
+          <meshStandardMaterial color={PANTS_COLOR} roughness={0.8} />
+        </mesh>
+        {/* Knee */}
+        <mesh position={[0, -0.46, 0]} castShadow>
+          <sphereGeometry args={[0.09, 8, 8]} />
+          <meshStandardMaterial color={PANTS_COLOR} roughness={0.8} />
+        </mesh>
+        {/* Lower leg */}
+        <mesh position={[0, -0.65, 0]} castShadow>
+          <cylinderGeometry args={[0.085, 0.07, 0.38, 8]} />
+          <meshStandardMaterial color={PANTS_COLOR} roughness={0.8} />
+        </mesh>
+        {/* Boot */}
+        <mesh position={[0, -0.88, 0.03]} castShadow>
+          <boxGeometry args={[0.14, 0.14, 0.22]} />
+          <meshStandardMaterial
+            color={BOOT_COLOR}
+            roughness={0.7}
+            metalness={0.2}
+          />
+        </mesh>
+      </group>
+
+      {/* ── RIGHT LEG ── */}
+      <group ref={rightLegRef} position={[0.14, 0.6, 0]}>
+        {/* Upper leg */}
+        <mesh position={[0, -0.22, 0]} castShadow>
+          <cylinderGeometry args={[0.1, 0.085, 0.44, 8]} />
+          <meshStandardMaterial color={PANTS_COLOR} roughness={0.8} />
+        </mesh>
+        {/* Knee */}
+        <mesh position={[0, -0.46, 0]} castShadow>
+          <sphereGeometry args={[0.09, 8, 8]} />
+          <meshStandardMaterial color={PANTS_COLOR} roughness={0.8} />
+        </mesh>
+        {/* Lower leg */}
+        <mesh position={[0, -0.65, 0]} castShadow>
+          <cylinderGeometry args={[0.085, 0.07, 0.38, 8]} />
+          <meshStandardMaterial color={PANTS_COLOR} roughness={0.8} />
+        </mesh>
+        {/* Boot */}
+        <mesh position={[0, -0.88, 0.03]} castShadow>
+          <boxGeometry args={[0.14, 0.14, 0.22]} />
+          <meshStandardMaterial
+            color={BOOT_COLOR}
+            roughness={0.7}
+            metalness={0.2}
+          />
+        </mesh>
+      </group>
+
+      {/* ── HP BAR ── */}
+      <group position={[0, 2.1, 0]}>
         <mesh>
           <planeGeometry args={[0.8, 0.1]} />
           <meshBasicMaterial color="#330000" />
