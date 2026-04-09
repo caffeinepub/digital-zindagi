@@ -122,7 +122,8 @@ type AdminSection =
   | "jobsManager"
   | "masterToggles"
   | "earningDashboard"
-  | "customCode";
+  | "customCode"
+  | "udhaarBook";
 
 const DEFAULT_EMERALD = "#059669";
 
@@ -6940,6 +6941,113 @@ function MasterSectionTogglesSection() {
 }
 
 // ============================================================
+// UDHAAR BOOK SETTINGS SECTION
+// ============================================================
+function UdhaarBookSettingsSection() {
+  const [udhaarEnabled, setUdhaarEnabled] = useState<boolean>(() => {
+    const val = localStorage.getItem("dz_udhaar_enabled");
+    return val === null || val === "true";
+  });
+  const [admobUdhaarId, setAdmobUdhaarId] = useState(
+    () => localStorage.getItem("dz_admob_udhaar_unit_id") ?? "",
+  );
+
+  const toggleUdhaar = () => {
+    const newVal = !udhaarEnabled;
+    localStorage.setItem("dz_udhaar_enabled", newVal ? "true" : "false");
+    setUdhaarEnabled(newVal);
+    broadcastSettingsChange();
+    toast.success(`Udhaar Book ${newVal ? "ON ✅" : "OFF 🔴"} kar diya!`);
+  };
+
+  const saveAdmobId = () => {
+    localStorage.setItem("dz_admob_udhaar_unit_id", admobUdhaarId.trim());
+    broadcastSettingsChange();
+    toast.success("AdMob Unit ID save ho gaya!");
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Enable/Disable Toggle */}
+      <div
+        className={`bg-white rounded-2xl border-2 p-5 space-y-4 ${udhaarEnabled ? "border-emerald-300" : "border-slate-200"}`}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="font-heading font-bold text-base">📒 Udhaar Book</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Sidebar menu mein "उधार बुक" link dikhana ya chhupaana. Providers
+              apne customers ka ledger manage kar sakte hain.
+            </p>
+          </div>
+          <button
+            type="button"
+            data-ocid="admin.udhaar_toggle"
+            onClick={toggleUdhaar}
+            className="flex items-center gap-2 flex-shrink-0"
+          >
+            {udhaarEnabled ? (
+              <>
+                <ToggleRight size={32} className="text-emerald-600" />
+                <span className="text-emerald-600 text-xs font-bold">ON</span>
+              </>
+            ) : (
+              <>
+                <ToggleLeft size={32} className="text-muted-foreground" />
+                <span className="text-muted-foreground text-xs font-bold">
+                  OFF
+                </span>
+              </>
+            )}
+          </button>
+        </div>
+        <div
+          className={`text-xs font-semibold px-3 py-2 rounded-xl ${udhaarEnabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-50 text-slate-500"}`}
+        >
+          {udhaarEnabled
+            ? "✅ Udhaar Book sidebar mein dikh raha hai"
+            : "🔴 Udhaar Book sidebar se chhupi hui hai"}
+        </div>
+      </div>
+
+      {/* AdMob Interstitial Unit ID */}
+      <div className="bg-white rounded-2xl border border-border p-5 space-y-4">
+        <h3 className="font-heading font-bold text-base">
+          💰 AdMob — Udhaar Book
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          Udhaar Book page ke liye AdMob Interstitial Unit ID set karein.
+          (Future use — jab AdMob integrate karein)
+        </p>
+        <div className="flex gap-3">
+          <input
+            type="text"
+            placeholder="ca-app-pub-XXXXX/XXXXX"
+            value={admobUdhaarId}
+            onChange={(e) => setAdmobUdhaarId(e.target.value)}
+            className="flex-1 border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+            data-ocid="admin.udhaar_admob_input"
+          />
+          <button
+            type="button"
+            onClick={saveAdmobId}
+            className="bg-primary text-primary-foreground font-bold px-5 py-3 rounded-xl text-sm"
+            data-ocid="admin.udhaar_admob_save"
+          >
+            Save
+          </button>
+        </div>
+        {admobUdhaarId && (
+          <p className="text-xs text-muted-foreground break-all bg-muted rounded-lg px-3 py-2">
+            Saved: {admobUdhaarId}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // EARNING DASHBOARD SECTION WRAPPER
 // ============================================================
 function EarningDashboardSection() {
@@ -7453,6 +7561,11 @@ export default function AdminDashboardPage() {
       icon: <span>🎛️</span>,
     },
     {
+      key: "udhaarBook" as AdminSection,
+      label: "📔 Udhaar Book Settings",
+      icon: <span>📔</span>,
+    },
+    {
       key: "earningDashboard" as AdminSection,
       label: "📊 Earning Dashboard",
       icon: <span>📊</span>,
@@ -7536,6 +7649,8 @@ export default function AdminDashboardPage() {
         return <JobsManagerSection />;
       case "masterToggles" as AdminSection:
         return <MasterSectionTogglesSection />;
+      case "udhaarBook" as AdminSection:
+        return <UdhaarBookSettingsSection />;
       case "earningDashboard" as AdminSection:
         return <EarningDashboardSection />;
       case "customCode" as AdminSection:

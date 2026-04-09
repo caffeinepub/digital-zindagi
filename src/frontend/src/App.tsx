@@ -38,6 +38,7 @@ import ScrapCalculatorPage from "./pages/ScrapCalculatorPage";
 import SearchPage from "./pages/SearchPage";
 import SignupPage from "./pages/SignupPage";
 import TermsPage from "./pages/TermsPage";
+import UdhaarBookPage from "./pages/UdhaarBookPage";
 
 function ProviderRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -100,6 +101,7 @@ function AppRoutes() {
         <Route path="/about" element={<AboutPage />} />
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/scrap-calculator" element={<ScrapCalculatorPage />} />
+        <Route path="/udhaar-book" element={<UdhaarBookPage />} />
         <Route path="/news" element={<NewsPage />} />
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/image-resizer" element={<ImageResizerPage />} />

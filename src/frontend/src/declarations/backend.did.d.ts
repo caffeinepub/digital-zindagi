@@ -123,6 +123,25 @@ export type SubscriptionStatus = { 'active' : null } |
   { 'expired' : null } |
   { 'pending' : null } |
   { 'rejected' : null };
+export interface UdhaarCustomer {
+  'id' : string,
+  'shopId' : string,
+  'name' : string,
+  'createdAt' : bigint,
+  'address' : string,
+  'mobile' : string,
+}
+export interface UdhaarTransaction {
+  'id' : string,
+  'status' : string,
+  'transactionType' : string,
+  'shopId' : string,
+  'date' : string,
+  'note' : string,
+  'createdAt' : bigint,
+  'customerId' : string,
+  'amount' : number,
+}
 export interface User {
   'id' : bigint,
   'name' : string,
@@ -204,6 +223,16 @@ export interface _SERVICE {
   'addScrapRate' : ActorMethod<[string, number, number], bigint>,
   'addServiceRate' : ActorMethod<[bigint, ServiceRate], undefined>,
   'addShopPhoto' : ActorMethod<[bigint, string], undefined>,
+  'addUdhaarCustomer' : ActorMethod<
+    [string, string, string, string],
+    { 'ok' : UdhaarCustomer } |
+      { 'err' : string }
+  >,
+  'addUdhaarTransaction' : ActorMethod<
+    [string, string, number, string, string, string],
+    { 'ok' : UdhaarTransaction } |
+      { 'err' : string }
+  >,
   'addVideo' : ActorMethod<[string, string, string, string, string], bigint>,
   'approveProvider' : ActorMethod<[bigint, SubscriptionPlan], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole__1], undefined>,
@@ -215,6 +244,16 @@ export interface _SERVICE {
   'deleteNews' : ActorMethod<[bigint], boolean>,
   'deleteScrapRate' : ActorMethod<[bigint], boolean>,
   'deleteServiceRate' : ActorMethod<[bigint, string], undefined>,
+  'deleteUdhaarCustomer' : ActorMethod<
+    [string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'deleteUdhaarTransaction' : ActorMethod<
+    [string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
   'deleteVideo' : ActorMethod<[bigint], boolean>,
   'editBanner' : ActorMethod<
     [bigint, string, string, string, string, boolean, bigint],
@@ -244,6 +283,9 @@ export interface _SERVICE {
   'getRecentUsers' : ActorMethod<[], Array<User>>,
   'getScrapRates' : ActorMethod<[], Array<ScrapRate>>,
   'getSubscriptionPricing' : ActorMethod<[], [] | [SubscriptionPricing]>,
+  'getUdhaarBalance' : ActorMethod<[string], number>,
+  'getUdhaarCustomers' : ActorMethod<[string], Array<UdhaarCustomer>>,
+  'getUdhaarTransactions' : ActorMethod<[string], Array<UdhaarTransaction>>,
   'getUserById' : ActorMethod<[bigint], [] | [User]>,
   'getUserByMobile' : ActorMethod<[MobileNumber], [] | [User]>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
@@ -253,6 +295,11 @@ export interface _SERVICE {
   'isCallerApproved' : ActorMethod<[], boolean>,
   'listApprovals' : ActorMethod<[], Array<UserApprovalInfo>>,
   'login' : ActorMethod<[MobileNumber, string], User>,
+  'markUdhaarTransactionPaid' : ActorMethod<
+    [string],
+    { 'ok' : UdhaarTransaction } |
+      { 'err' : string }
+  >,
   'placeOrder' : ActorMethod<
     [bigint, string, string, string, [] | [string]],
     bigint
@@ -304,6 +351,16 @@ export interface _SERVICE {
   >,
   'updateSubscriptionPricing' : ActorMethod<[SubscriptionPricing], undefined>,
   'updateToggle' : ActorMethod<[string, boolean], undefined>,
+  'updateUdhaarCustomer' : ActorMethod<
+    [string, string, string, string],
+    { 'ok' : UdhaarCustomer } |
+      { 'err' : string }
+  >,
+  'updateUdhaarTransaction' : ActorMethod<
+    [string, number, string, string, string],
+    { 'ok' : UdhaarTransaction } |
+      { 'err' : string }
+  >,
   'updateVideo' : ActorMethod<
     [bigint, string, string, string, string, string, boolean],
     boolean

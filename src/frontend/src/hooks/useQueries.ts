@@ -11,6 +11,8 @@ import type {
   ScrapRate,
   SubscriptionPlan,
   SubscriptionPricing,
+  UdhaarCustomer,
+  UdhaarTransaction,
   User,
   VideoItem,
 } from "../types/appTypes";
@@ -1125,5 +1127,205 @@ export function useUpdateAppSettings() {
         );
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["appSettings"] }),
+  });
+}
+
+// =====================================================================
+// UDHAAR BOOK HOOKS — localStorage-backed (per provider)
+// =====================================================================
+
+function udhaarCustomersKey(providerId: string) {
+  return `dz_udhaar_customers_${providerId}`;
+}
+function udhaarTransactionsKey(providerId: string) {
+  return `dz_udhaar_transactions_${providerId}`;
+}
+
+export function useUdhaarCustomers(providerId: string) {
+  return useQuery<UdhaarCustomer[]>({
+    queryKey: ["udhaarCustomers", providerId],
+    queryFn: () => {
+      return lsRead<UdhaarCustomer[]>(udhaarCustomersKey(providerId), []);
+    },
+    enabled: !!providerId,
+    staleTime: 0,
+  });
+}
+
+export function useUdhaarTransactions(customerId: string, providerId: string) {
+  return useQuery<UdhaarTransaction[]>({
+    queryKey: ["udhaarTransactions", customerId, providerId],
+    queryFn: () => {
+      const all = lsRead<UdhaarTransaction[]>(
+        udhaarTransactionsKey(providerId),
+        [],
+      );
+      return all.filter((t) => t.customerId === customerId);
+    },
+    enabled: !!customerId && !!providerId,
+    staleTime: 0,
+  });
+}
+
+export function useAddUdhaarCustomer(providerId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: Omit<UdhaarCustomer, "id" | "providerId" | "createdAt">,
+    ) => {
+      const customers = lsRead<UdhaarCustomer[]>(
+        udhaarCustomersKey(providerId),
+        [],
+      );
+      const newCustomer: UdhaarCustomer = {
+        ...data,
+        id: String(Date.now()),
+        providerId,
+        createdAt: Date.now(),
+      };
+      lsWrite(udhaarCustomersKey(providerId), [...customers, newCustomer]);
+      return newCustomer;
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["udhaarCustomers", providerId] }),
+  });
+}
+
+export function useUpdateUdhaarCustomer(providerId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: Pick<UdhaarCustomer, "id" | "name" | "mobile" | "address">,
+    ) => {
+      const customers = lsRead<UdhaarCustomer[]>(
+        udhaarCustomersKey(providerId),
+        [],
+      );
+      const updated = customers.map((c) =>
+        c.id === data.id ? { ...c, ...data } : c,
+      );
+      lsWrite(udhaarCustomersKey(providerId), updated);
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["udhaarCustomers", providerId] }),
+  });
+}
+
+export function useDeleteUdhaarCustomer(providerId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (customerId: string) => {
+      const customers = lsRead<UdhaarCustomer[]>(
+        udhaarCustomersKey(providerId),
+        [],
+      );
+      lsWrite(
+        udhaarCustomersKey(providerId),
+        customers.filter((c) => c.id !== customerId),
+      );
+      // Also delete all transactions for this customer
+      const txns = lsRead<UdhaarTransaction[]>(
+        udhaarTransactionsKey(providerId),
+        [],
+      );
+      lsWrite(
+        udhaarTransactionsKey(providerId),
+        txns.filter((t) => t.customerId !== customerId),
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["udhaarCustomers", providerId] });
+      qc.invalidateQueries({ queryKey: ["udhaarTransactions"] });
+    },
+  });
+}
+
+export function useAddUdhaarTransaction(providerId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: Omit<UdhaarTransaction, "id" | "status" | "createdAt">,
+    ) => {
+      const txns = lsRead<UdhaarTransaction[]>(
+        udhaarTransactionsKey(providerId),
+        [],
+      );
+      const newTxn: UdhaarTransaction = {
+        ...data,
+        id: String(Date.now()),
+        status: "pending",
+        createdAt: Date.now(),
+      };
+      lsWrite(udhaarTransactionsKey(providerId), [...txns, newTxn]);
+      return newTxn;
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({
+        queryKey: ["udhaarTransactions", vars.customerId, providerId],
+      });
+      qc.invalidateQueries({ queryKey: ["udhaarCustomers", providerId] });
+    },
+  });
+}
+
+export function useMarkUdhaarTransactionPaid(providerId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      txId,
+      customerId,
+    }: { txId: string; customerId: string }) => {
+      const txns = lsRead<UdhaarTransaction[]>(
+        udhaarTransactionsKey(providerId),
+        [],
+      );
+      lsWrite(
+        udhaarTransactionsKey(providerId),
+        txns.map((t) => (t.id === txId ? { ...t, status: "paid" } : t)),
+      );
+      return { txId, customerId };
+    },
+    onSuccess: (_data) => {
+      qc.invalidateQueries({
+        queryKey: ["udhaarTransactions", _data.customerId, providerId],
+      });
+      qc.invalidateQueries({ queryKey: ["udhaarCustomers", providerId] });
+    },
+  });
+}
+
+export function useDeleteUdhaarTransaction(providerId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      txId,
+      customerId,
+    }: { txId: string; customerId: string }) => {
+      const txns = lsRead<UdhaarTransaction[]>(
+        udhaarTransactionsKey(providerId),
+        [],
+      );
+      lsWrite(
+        udhaarTransactionsKey(providerId),
+        txns.filter((t) => t.id !== txId),
+      );
+      return { txId, customerId };
+    },
+    onSuccess: (_data) => {
+      qc.invalidateQueries({
+        queryKey: ["udhaarTransactions", _data.customerId, providerId],
+      });
+      qc.invalidateQueries({ queryKey: ["udhaarCustomers", providerId] });
+    },
+  });
+}
+
+export function useAllUdhaarTransactions(providerId: string) {
+  return useQuery<UdhaarTransaction[]>({
+    queryKey: ["allUdhaarTransactions", providerId],
+    queryFn: () =>
+      lsRead<UdhaarTransaction[]>(udhaarTransactionsKey(providerId), []),
+    enabled: !!providerId,
+    staleTime: 0,
   });
 }

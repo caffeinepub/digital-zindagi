@@ -19,7 +19,56 @@ export interface ServiceRate {
     description: string;
     price: bigint;
 }
-export type MobileNumber = string;
+export interface ProviderProfile {
+    userId: bigint;
+    subscriptionExpiry?: bigint;
+    subscriptionPlan: SubscriptionPlan;
+    description: string;
+    approvalStatus: ApprovalStatus;
+    subscriptionStatus: SubscriptionStatus;
+    paymentScreenshotBlobId?: string;
+    address: string;
+    serviceRates: Array<ServiceRate>;
+    upiId: string;
+    shopName: string;
+    category: string;
+    qrCodeBlobId?: string;
+    planType: PlanType;
+    photos: Array<string>;
+}
+export interface CustomCode {
+    id: bigint;
+    placement: string;
+    code: string;
+    icon: string;
+    name: string;
+    enabled: boolean;
+    btnLabel: string;
+}
+export interface NewsItem {
+    id: bigint;
+    title: string;
+    link: string;
+    createdAt: bigint;
+    enabled: boolean;
+    summary: string;
+    imageUrl: string;
+    category: string;
+}
+export interface ScrapRate {
+    id: bigint;
+    ratePerKg: number;
+    enabled: boolean;
+    ratePerGram: number;
+    itemName: string;
+}
+export interface Category {
+    id: bigint;
+    name: string;
+    color: string;
+    emoji: string;
+    enabled: boolean;
+}
 export interface JobItem {
     id: bigint;
     title: string;
@@ -31,12 +80,16 @@ export interface JobItem {
     lastDate: string;
     location: string;
 }
-export interface Category {
-    id: bigint;
-    name: string;
-    color: string;
-    emoji: string;
-    enabled: boolean;
+export interface UdhaarTransaction {
+    id: string;
+    status: string;
+    transactionType: string;
+    shopId: string;
+    date: string;
+    note: string;
+    createdAt: bigint;
+    customerId: string;
+    amount: number;
 }
 export interface User {
     id: bigint;
@@ -58,14 +111,13 @@ export interface VideoItem {
     category: string;
     videoUrl: string;
 }
-export interface CustomCode {
-    id: bigint;
-    placement: string;
-    code: string;
-    icon: string;
+export interface UdhaarCustomer {
+    id: string;
+    shopId: string;
     name: string;
-    enabled: boolean;
-    btnLabel: string;
+    createdAt: bigint;
+    address: string;
+    mobile: string;
 }
 export interface Order {
     id: bigint;
@@ -77,16 +129,6 @@ export interface Order {
     imageUrl?: string;
     customerId: bigint;
     providerId: bigint;
-}
-export interface NewsItem {
-    id: bigint;
-    title: string;
-    link: string;
-    createdAt: bigint;
-    enabled: boolean;
-    summary: string;
-    imageUrl: string;
-    category: string;
 }
 export interface UserApprovalInfo {
     status: ApprovalStatus;
@@ -101,13 +143,6 @@ export interface Banner {
     imageUrl: string;
     subtitle: string;
 }
-export interface ScrapRate {
-    id: bigint;
-    ratePerKg: number;
-    enabled: boolean;
-    ratePerGram: number;
-    itemName: string;
-}
 export interface AdminConfig {
     email: string;
     adminName: string;
@@ -120,28 +155,12 @@ export interface SubscriptionPricing {
     twelveMonthPrice: bigint;
     oneMonthPrice: bigint;
 }
+export type MobileNumber = string;
 export interface UserProfile {
     userId: bigint;
     name: string;
     role: UserRole;
     mobile: MobileNumber;
-}
-export interface ProviderProfile {
-    userId: bigint;
-    subscriptionExpiry?: bigint;
-    subscriptionPlan: SubscriptionPlan;
-    description: string;
-    approvalStatus: ApprovalStatus;
-    subscriptionStatus: SubscriptionStatus;
-    paymentScreenshotBlobId?: string;
-    address: string;
-    serviceRates: Array<ServiceRate>;
-    upiId: string;
-    shopName: string;
-    category: string;
-    qrCodeBlobId?: string;
-    planType: PlanType;
-    photos: Array<string>;
 }
 export enum ApprovalStatus {
     pending = "pending",
@@ -183,6 +202,20 @@ export interface backendInterface {
     addScrapRate(itemName: string, ratePerKg: number, ratePerGram: number): Promise<bigint>;
     addServiceRate(userId: bigint, newRate: ServiceRate): Promise<void>;
     addShopPhoto(userId: bigint, blobId: string): Promise<void>;
+    addUdhaarCustomer(shopId: string, name: string, mobile: string, address: string): Promise<{
+        __kind__: "ok";
+        ok: UdhaarCustomer;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    addUdhaarTransaction(customerId: string, shopId: string, amount: number, transactionType: string, date: string, note: string): Promise<{
+        __kind__: "ok";
+        ok: UdhaarTransaction;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     addVideo(title: string, videoUrl: string, thumbnailUrl: string, platform: string, category: string): Promise<bigint>;
     approveProvider(userId: bigint, plan: SubscriptionPlan): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole__1): Promise<void>;
@@ -194,6 +227,20 @@ export interface backendInterface {
     deleteNews(id: bigint): Promise<boolean>;
     deleteScrapRate(id: bigint): Promise<boolean>;
     deleteServiceRate(userId: bigint, rateName: string): Promise<void>;
+    deleteUdhaarCustomer(customerId: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    deleteUdhaarTransaction(transactionId: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     deleteVideo(id: bigint): Promise<boolean>;
     editBanner(bannerId: bigint, title: string, subtitle: string, imageUrl: string, linkUrl: string, active: boolean, displayOrder: bigint): Promise<void>;
     forgotPassword(mobile: MobileNumber, securityAnswer: string, newPasswordHash: string): Promise<void>;
@@ -220,6 +267,9 @@ export interface backendInterface {
     getRecentUsers(): Promise<Array<User>>;
     getScrapRates(): Promise<Array<ScrapRate>>;
     getSubscriptionPricing(): Promise<SubscriptionPricing | null>;
+    getUdhaarBalance(customerId: string): Promise<number>;
+    getUdhaarCustomers(shopId: string): Promise<Array<UdhaarCustomer>>;
+    getUdhaarTransactions(customerId: string): Promise<Array<UdhaarTransaction>>;
     getUserById(userId: bigint): Promise<User | null>;
     getUserByMobile(mobile: MobileNumber): Promise<User | null>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
@@ -229,6 +279,13 @@ export interface backendInterface {
     isCallerApproved(): Promise<boolean>;
     listApprovals(): Promise<Array<UserApprovalInfo>>;
     login(mobile: MobileNumber, passwordHash: string): Promise<User>;
+    markUdhaarTransactionPaid(transactionId: string): Promise<{
+        __kind__: "ok";
+        ok: UdhaarTransaction;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     placeOrder(providerId: bigint, customerName: string, description: string, orderType: string, imageUrl: string | null): Promise<bigint>;
     registerUser(name: string, mobile: MobileNumber, passwordHash: string, role: UserRole, securityQuestion: string, securityAnswer: string): Promise<void>;
     rejectProvider(userId: bigint): Promise<void>;
@@ -253,6 +310,20 @@ export interface backendInterface {
     updateScrapRate(id: bigint, itemName: string, ratePerKg: number, ratePerGram: number, enabled: boolean): Promise<boolean>;
     updateSubscriptionPricing(newPricing: SubscriptionPricing): Promise<void>;
     updateToggle(toggleName: string, value: boolean): Promise<void>;
+    updateUdhaarCustomer(customerId: string, name: string, mobile: string, address: string): Promise<{
+        __kind__: "ok";
+        ok: UdhaarCustomer;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    updateUdhaarTransaction(transactionId: string, amount: number, transactionType: string, date: string, note: string): Promise<{
+        __kind__: "ok";
+        ok: UdhaarTransaction;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     updateVideo(id: bigint, title: string, videoUrl: string, thumbnailUrl: string, platform: string, category: string, enabled: boolean): Promise<boolean>;
     uploadPaymentScreenshot(userId: bigint, blobId: string): Promise<void>;
     verifyAdminPin(pinHash: string): Promise<boolean>;

@@ -61,6 +61,10 @@ persistent actor {
   var videos = Map.empty<Nat, VideoItem>();
   var nextVideoId = 1;
 
+  // Udhaar Book state
+  var udhaarCustomers = Map.empty<Text, UdhaarCustomer>();
+  var udhaarTransactions = Map.empty<Text, UdhaarTransaction>();
+
   // App Settings (JSON blob for all misc settings — notification bar, app tagline, etc.)
   var appSettingsJson : Text = "{}";
 
@@ -250,6 +254,29 @@ persistent actor {
     platform : Text;
     category : Text;
     enabled : Bool;
+    createdAt : Int;
+  };
+
+  // ── Udhaar Book types ─────────────────────────────────────────────────────
+
+  type UdhaarCustomer = {
+    id : Text;
+    shopId : Text;
+    name : Text;
+    mobile : Text;
+    address : Text;
+    createdAt : Int;
+  };
+
+  type UdhaarTransaction = {
+    id : Text;
+    customerId : Text;
+    shopId : Text;
+    amount : Float;
+    transactionType : Text;   // "Give" | "Take"
+    date : Text;
+    note : Text;
+    status : Text;            // "Pending" | "Paid"
     createdAt : Int;
   };
 
@@ -1312,5 +1339,133 @@ persistent actor {
       Runtime.trap("Unauthorized: Only admins can update app settings");
     };
     appSettingsJson := json;
+  };
+
+  // ── UDHAAR BOOK ───────────────────────────────────────────────────────────
+  // Toggle key: 'dz_udhaar_enabled' — use existing updateToggle/getAllToggles
+
+  // Helper: generate a simple unique text ID from time + a suffix
+  func makeId(prefix : Text) : Text {
+    prefix # Time.now().toText();
+  };
+
+  // ── Udhaar Customers ──────────────────────────────────────────────────────
+
+  public shared ({ caller }) func addUdhaarCustomer(shopId : Text, name : Text, mobile : Text, address : Text) : async { #ok : UdhaarCustomer; #err : Text } {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return #err("Unauthorized: Login required");
+    };
+    let id = makeId("uc");
+    let customer : UdhaarCustomer = { id; shopId; name; mobile; address; createdAt = Time.now() };
+    udhaarCustomers.add(id, customer);
+    #ok(customer);
+  };
+
+  public shared ({ caller }) func updateUdhaarCustomer(customerId : Text, name : Text, mobile : Text, address : Text) : async { #ok : UdhaarCustomer; #err : Text } {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return #err("Unauthorized: Login required");
+    };
+    switch (udhaarCustomers.get(customerId)) {
+      case null { #err("Customer not found") };
+      case (?c) {
+        let updated : UdhaarCustomer = { c with name; mobile; address };
+        udhaarCustomers.add(customerId, updated);
+        #ok(updated);
+      };
+    };
+  };
+
+  public shared ({ caller }) func deleteUdhaarCustomer(customerId : Text) : async { #ok : (); #err : Text } {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return #err("Unauthorized: Login required");
+    };
+    if (not udhaarCustomers.containsKey(customerId)) {
+      return #err("Customer not found");
+    };
+    udhaarCustomers.remove(customerId);
+    // Delete all associated transactions
+    let toDelete = udhaarTransactions.entries()
+      .filter(func(kv : (Text, UdhaarTransaction)) : Bool { kv.1.customerId == customerId })
+      .map(func(kv : (Text, UdhaarTransaction)) : Text { kv.0 })
+      .toArray();
+    for (k in toDelete.values()) {
+      udhaarTransactions.remove(k);
+    };
+    #ok(());
+  };
+
+  public query func getUdhaarCustomers(shopId : Text) : async [UdhaarCustomer] {
+    udhaarCustomers.values()
+      .filter(func(c : UdhaarCustomer) : Bool { c.shopId == shopId })
+      .toArray();
+  };
+
+  // ── Udhaar Transactions ───────────────────────────────────────────────────
+
+  public shared ({ caller }) func addUdhaarTransaction(customerId : Text, shopId : Text, amount : Float, transactionType : Text, date : Text, note : Text) : async { #ok : UdhaarTransaction; #err : Text } {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return #err("Unauthorized: Login required");
+    };
+    if (not udhaarCustomers.containsKey(customerId)) {
+      return #err("Customer not found");
+    };
+    let id = makeId("ut");
+    let txn : UdhaarTransaction = { id; customerId; shopId; amount; transactionType; date; note; status = "Pending"; createdAt = Time.now() };
+    udhaarTransactions.add(id, txn);
+    #ok(txn);
+  };
+
+  public shared ({ caller }) func updateUdhaarTransaction(transactionId : Text, amount : Float, transactionType : Text, date : Text, note : Text) : async { #ok : UdhaarTransaction; #err : Text } {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return #err("Unauthorized: Login required");
+    };
+    switch (udhaarTransactions.get(transactionId)) {
+      case null { #err("Transaction not found") };
+      case (?t) {
+        let updated : UdhaarTransaction = { t with amount; transactionType; date; note };
+        udhaarTransactions.add(transactionId, updated);
+        #ok(updated);
+      };
+    };
+  };
+
+  public shared ({ caller }) func markUdhaarTransactionPaid(transactionId : Text) : async { #ok : UdhaarTransaction; #err : Text } {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return #err("Unauthorized: Login required");
+    };
+    switch (udhaarTransactions.get(transactionId)) {
+      case null { #err("Transaction not found") };
+      case (?t) {
+        let updated : UdhaarTransaction = { t with status = "Paid" };
+        udhaarTransactions.add(transactionId, updated);
+        #ok(updated);
+      };
+    };
+  };
+
+  public shared ({ caller }) func deleteUdhaarTransaction(transactionId : Text) : async { #ok : (); #err : Text } {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return #err("Unauthorized: Login required");
+    };
+    if (not udhaarTransactions.containsKey(transactionId)) {
+      return #err("Transaction not found");
+    };
+    udhaarTransactions.remove(transactionId);
+    #ok(());
+  };
+
+  public query func getUdhaarTransactions(customerId : Text) : async [UdhaarTransaction] {
+    udhaarTransactions.values()
+      .filter(func(t : UdhaarTransaction) : Bool { t.customerId == customerId })
+      .toArray();
+  };
+
+  public query func getUdhaarBalance(customerId : Text) : async Float {
+    udhaarTransactions.values()
+      .filter(func(t : UdhaarTransaction) : Bool { t.customerId == customerId })
+      .foldLeft(0.0, func(acc : Float, t : UdhaarTransaction) : Float {
+        if (t.transactionType == "Give") { acc + t.amount }
+        else { acc - t.amount };
+      });
   };
 };

@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Briefcase,
   Gamepad2,
   Globe,
@@ -35,20 +36,28 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     return val === null || val === "true";
   });
 
+  // Udhaar Book visibility — controlled by Admin toggle (dz_udhaar_enabled)
+  const [showUdhaar, setShowUdhaar] = useState<boolean>(() => {
+    const val = localStorage.getItem("dz_udhaar_enabled");
+    return val === null || val === "true";
+  });
+
   useEffect(() => {
-    const syncGameVisibility = () => {
-      const val = localStorage.getItem("dz_game_visible");
-      setShowGame(val === null || val === "true");
+    const syncVisibility = () => {
+      const gameVal = localStorage.getItem("dz_game_visible");
+      setShowGame(gameVal === null || gameVal === "true");
+      const udhaarVal = localStorage.getItem("dz_udhaar_enabled");
+      setShowUdhaar(udhaarVal === null || udhaarVal === "true");
     };
 
     // Listen to real-time broadcast from Admin Panel
-    window.addEventListener("settings-sync", syncGameVisibility);
+    window.addEventListener("settings-sync", syncVisibility);
     // Fallback: listen to raw storage event (cross-tab)
-    window.addEventListener("storage", syncGameVisibility);
+    window.addEventListener("storage", syncVisibility);
 
     return () => {
-      window.removeEventListener("settings-sync", syncGameVisibility);
-      window.removeEventListener("storage", syncGameVisibility);
+      window.removeEventListener("settings-sync", syncVisibility);
+      window.removeEventListener("storage", syncVisibility);
     };
   }, []);
 
@@ -98,6 +107,15 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     { to: "/", label: t("home"), icon: <Home size={18} /> },
     ...(showGame
       ? [{ to: "/game", label: "🎮 Game", icon: <Gamepad2 size={18} /> }]
+      : []),
+    ...(showUdhaar
+      ? [
+          {
+            to: "/udhaar-book",
+            label: "📒 उधार बुक",
+            icon: <BookOpen size={18} />,
+          },
+        ]
       : []),
     ...(user
       ? [
