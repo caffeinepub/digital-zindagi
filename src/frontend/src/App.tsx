@@ -34,6 +34,7 @@ import PrivacyPage from "./pages/PrivacyPage";
 import ProviderDashboardPage from "./pages/ProviderDashboardPage";
 import ProviderProfilePage from "./pages/ProviderProfilePage";
 import ProviderSubscribePage from "./pages/ProviderSubscribePage";
+import RewardsWalletPage from "./pages/RewardsWalletPage";
 import ScrapCalculatorPage from "./pages/ScrapCalculatorPage";
 import SearchPage from "./pages/SearchPage";
 import SignupPage from "./pages/SignupPage";
@@ -72,6 +73,21 @@ function ManagerRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** Udhaar Book is only for providers, admins, and super-admins. */
+function UdhaarRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading, isFullAdmin } = useAuth();
+  if (loading)
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <span className="text-primary">Load Ho Raha Hai...</span>
+      </div>
+    );
+  const isProvider = user?.role === UserRole.provider;
+  if (!user || (!isProvider && !isFullAdmin))
+    return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
 function AppRoutes() {
   useEffect(() => {
     // Apply saved theme color
@@ -101,7 +117,14 @@ function AppRoutes() {
         <Route path="/about" element={<AboutPage />} />
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/scrap-calculator" element={<ScrapCalculatorPage />} />
-        <Route path="/udhaar-book" element={<UdhaarBookPage />} />
+        <Route
+          path="/udhaar-book"
+          element={
+            <UdhaarRoute>
+              <UdhaarBookPage />
+            </UdhaarRoute>
+          }
+        />
         <Route path="/news" element={<NewsPage />} />
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/image-resizer" element={<ImageResizerPage />} />
@@ -112,6 +135,7 @@ function AppRoutes() {
           path="/percentage-calculator"
           element={<PercentageCalculatorPage />}
         />
+        <Route path="/rewards-wallet" element={<RewardsWalletPage />} />
         <Route path="/manager-login" element={<ManagerLoginPage />} />
         {/* Delivery Module */}
         <Route path="/delivery-register" element={<DeliveryRegisterPage />} />

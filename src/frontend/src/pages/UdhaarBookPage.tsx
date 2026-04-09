@@ -1,16 +1,19 @@
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   BookOpen,
+  LogIn,
   MessageCircle,
   Phone,
   Plus,
-  RotateCcw,
   Search,
   Trash2,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import AdMobBanner from "../components/AdMobBanner";
+import InterstitialAd from "../components/InterstitialAd";
 import { useAuth } from "../contexts/AuthContext";
 import {
   useAddUdhaarCustomer,
@@ -25,6 +28,7 @@ import {
 } from "../hooks/useQueries";
 import { useNavigate } from "../lib/router";
 import type { UdhaarCustomer, UdhaarTransaction } from "../types/appTypes";
+import { UserRole } from "../types/appTypes";
 
 // ---- Balance Helpers ----
 function getBalance(transactions: UdhaarTransaction[]): number {
@@ -133,22 +137,24 @@ function TransactionRow({
 // ---- Customer Detail Panel ----
 function CustomerDetailPanel({
   customer,
-  providerId,
+  shopId,
   providerShopName,
   onClose,
+  onInterstitialTrigger,
 }: {
   customer: UdhaarCustomer;
-  providerId: string;
+  shopId: string;
   providerShopName: string;
   onClose: () => void;
+  onInterstitialTrigger: () => void;
 }) {
   const { data: transactions = [], refetch } = useUdhaarTransactions(
     customer.id,
-    providerId,
+    shopId,
   );
-  const addTxn = useAddUdhaarTransaction(providerId);
-  const markPaid = useMarkUdhaarTransactionPaid(providerId);
-  const deleteTxn = useDeleteUdhaarTransaction(providerId);
+  const addTxn = useAddUdhaarTransaction(shopId);
+  const markPaid = useMarkUdhaarTransactionPaid(shopId);
+  const deleteTxn = useDeleteUdhaarTransaction(shopId);
 
   const [amount, setAmount] = useState("");
   const [txType, setTxType] = useState<"give" | "take">("give");
@@ -177,6 +183,7 @@ function CustomerDetailPanel({
     setNote("");
     void refetch();
     toast.success("Transaction save ho gaya! ✅");
+    onInterstitialTrigger();
   };
 
   const handleMarkPaid = async (txId: string) => {
@@ -197,6 +204,7 @@ function CustomerDetailPanel({
     const absAmt = Math.abs(shareBalance).toLocaleString("hi-IN");
     const msg = `नमस्ते ${customer.name}, आपका ₹${absAmt} का हिसाब बकाया है। - ${providerShopName}. यह हिसाब *Digital Zindagi* ऐप के माध्यम से भेजा गया है।`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+    onInterstitialTrigger();
   };
 
   const handleShareBalance = () => {
@@ -208,6 +216,7 @@ function CustomerDetailPanel({
     const direction = balance > 0 ? "आपका" : "हमारा";
     const msg = `नमस्ते ${customer.name}, ${direction} ₹${absAmt} का हिसाब बकाया है। - ${providerShopName}. यह हिसाब *Digital Zindagi* ऐप के माध्यम से भेजा गया है।`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+    onInterstitialTrigger();
   };
 
   return (
@@ -338,23 +347,36 @@ function CustomerDetailPanel({
 
 // ---- Main Page ----
 export default function UdhaarBookPage() {
-  const { user } = useAuth();
+  const { user, loading, isFullAdmin } = useAuth();
   const navigate = useNavigate();
-  const providerId = user ? String(user.userId) : "guest";
+  const qc = useQueryClient();
+
+  // shopId is the provider's userId as a string — used as the isolation key in the canister
+  const shopId = user ? String(user.userId) : "";
+
+  // On mount, if user changed (e.g. different provider logged in), clear stale Udhaar cache
+  useEffect(() => {
+    if (shopId) {
+      // Prefetch fresh data, ensuring no cross-provider contamination
+      qc.invalidateQueries({ queryKey: ["udhaarCustomers"] });
+      qc.invalidateQueries({ queryKey: ["allUdhaarTransactions"] });
+    }
+  }, [shopId, qc]);
 
   const { data: profileData } = useProviderProfile(user ? user.userId : null);
   const providerShopName =
     profileData?.shopName ??
     profileData?.businessName ??
     user?.name ??
+    user?.mobile ??
     "Provider";
 
   const { data: customers = [], refetch: refetchCustomers } =
-    useUdhaarCustomers(providerId);
-  const { data: allTxns = [] } = useAllUdhaarTransactions(providerId);
+    useUdhaarCustomers(shopId);
+  const { data: allTxns = [] } = useAllUdhaarTransactions(shopId);
 
-  const addCustomer = useAddUdhaarCustomer(providerId);
-  const deleteCustomer = useDeleteUdhaarCustomer(providerId);
+  const addCustomer = useAddUdhaarCustomer(shopId);
+  const deleteCustomer = useDeleteUdhaarCustomer(shopId);
 
   const [custName, setCustName] = useState("");
   const [custMobile, setCustMobile] = useState("");
@@ -364,9 +386,88 @@ export default function UdhaarBookPage() {
     useState<UdhaarCustomer | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
+  // Interstitial Ad state
+  const [showInterstitial, setShowInterstitial] = useState(false);
+  const lastInterstitialTime = useRef<number>(0);
+
+  const admobEnabled = (() => {
+    try {
+      const cfg = JSON.parse(localStorage.getItem("dz_admob_config") ?? "{}");
+      return cfg.masterEnabled !== false && cfg.interstitialEnabled === true;
+    } catch {
+      return false;
+    }
+  })();
+
+  const customAds: string[] = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("dz_custom_internal_ads") ?? "[]");
+    } catch {
+      return [];
+    }
+  })();
+
+  const triggerInterstitial = () => {
+    if (!admobEnabled) return;
+    const now = Date.now();
+    // 10-second cooldown to prevent double-firing
+    if (now - lastInterstitialTime.current < 10_000) return;
+    lastInterstitialTime.current = now;
+    setShowInterstitial(true);
+  };
+
   const pendingTotalCount = allTxns.filter(
     (t) => t.status === "pending",
   ).length;
+
+  // ---- Auth guard ----
+  if (loading) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: "#0b1220" }}
+      >
+        <span className="text-emerald-400">Load Ho Raha Hai...</span>
+      </div>
+    );
+  }
+
+  const isProvider = user?.role === UserRole.provider;
+  if (!user || (!isProvider && !isFullAdmin)) {
+    return (
+      <div
+        className="min-h-screen flex flex-col items-center justify-center gap-6 px-6"
+        style={{ background: "#0b1220" }}
+        data-ocid="udhaar.login_required"
+      >
+        <BookOpen size={52} className="text-emerald-600" />
+        <div className="text-center space-y-2">
+          <h1 className="text-white text-xl font-bold">📒 उधार बुक</h1>
+          <p className="text-slate-400 text-sm max-w-xs">
+            यह section सिर्फ Providers के लिए है। कृपया अपने Provider account से login
+            करें।
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate("/login")}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white text-sm"
+          style={{ background: "linear-gradient(135deg, #059669, #1d4ed8)" }}
+          data-ocid="udhaar.login_button"
+        >
+          <LogIn size={16} />
+          Login करें
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate("/")}
+          className="text-slate-500 text-xs underline"
+        >
+          वापस जाएं
+        </button>
+      </div>
+    );
+  }
 
   const handleAddCustomer = async () => {
     if (!custName.trim()) {
@@ -397,14 +498,6 @@ export default function UdhaarBookPage() {
     toast.success("ग्राहक delete हो गया");
   };
 
-  const handleReset = () => {
-    if (!confirm("इस provider के सभी Udhaar data delete करें?")) return;
-    localStorage.removeItem(`dz_udhaar_customers_${providerId}`);
-    localStorage.removeItem(`dz_udhaar_transactions_${providerId}`);
-    void refetchCustomers();
-    toast.success("सभी data clear हो गया");
-  };
-
   const getCustomerBalance = (customerId: string) => {
     const txns = allTxns.filter(
       (t) => t.customerId === customerId && t.status === "pending",
@@ -422,9 +515,10 @@ export default function UdhaarBookPage() {
     return (
       <CustomerDetailPanel
         customer={selectedCustomer}
-        providerId={providerId}
+        shopId={shopId}
         providerShopName={providerShopName}
         onClose={() => setSelectedCustomer(null)}
+        onInterstitialTrigger={triggerInterstitial}
       />
     );
   }
@@ -434,6 +528,18 @@ export default function UdhaarBookPage() {
       className="min-h-screen flex flex-col"
       style={{ background: "#0b1220" }}
     >
+      {/* AdMob Banner at top */}
+      <AdMobBanner />
+
+      {/* Interstitial Ad overlay */}
+      {showInterstitial && (
+        <InterstitialAd
+          phase="post"
+          adBlocked={false}
+          customAds={customAds}
+          onClose={() => setShowInterstitial(false)}
+        />
+      )}
       {/* Header */}
       <header
         className="flex-shrink-0 px-4 py-3 flex items-center justify-between"
@@ -459,15 +565,6 @@ export default function UdhaarBookPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleReset}
-            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition-colors"
-            title="Reset all data"
-            data-ocid="udhaar.reset_button"
-          >
-            <RotateCcw size={16} />
-          </button>
           <button
             type="button"
             onClick={() => setShowAddForm((p) => !p)}
@@ -544,7 +641,7 @@ export default function UdhaarBookPage() {
           />
         </div>
 
-        {/* Summary Row */}
+        {/* Summary Row — real-time from canister */}
         <div className="grid grid-cols-2 gap-2">
           <div className="bg-slate-900 rounded-xl border border-slate-700 p-3 text-center">
             <p className="text-xl font-bold text-white">{customers.length}</p>

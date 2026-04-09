@@ -1131,201 +1131,571 @@ export function useUpdateAppSettings() {
 }
 
 // =====================================================================
-// UDHAAR BOOK HOOKS — localStorage-backed (per provider)
+// UDHAAR BOOK HOOKS — canister-backed, provider-scoped
+// shopId = String(provider.userId) — used as the isolation key in the canister
 // =====================================================================
 
-function udhaarCustomersKey(providerId: string) {
-  return `dz_udhaar_customers_${providerId}`;
-}
-function udhaarTransactionsKey(providerId: string) {
-  return `dz_udhaar_transactions_${providerId}`;
+import type { backendInterface } from "../backend.d.ts";
+
+/** Typed accessor for actor that exposes all Udhaar backend methods */
+type UdhaarActor = Pick<
+  backendInterface,
+  | "getUdhaarCustomers"
+  | "getUdhaarTransactions"
+  | "addUdhaarCustomer"
+  | "updateUdhaarCustomer"
+  | "deleteUdhaarCustomer"
+  | "addUdhaarTransaction"
+  | "markUdhaarTransactionPaid"
+  | "deleteUdhaarTransaction"
+>;
+
+function asUdhaarActor(actor: unknown): UdhaarActor {
+  return actor as UdhaarActor;
 }
 
-export function useUdhaarCustomers(providerId: string) {
+/** Map backend UdhaarCustomer (uses shopId) → frontend UdhaarCustomer (uses providerId) */
+function mapBackendCustomer(
+  c: import("../backend.d.ts").UdhaarCustomer,
+): UdhaarCustomer {
+  return {
+    id: c.id,
+    providerId: c.shopId,
+    name: c.name,
+    mobile: c.mobile,
+    address: c.address,
+    createdAt: Number(c.createdAt),
+  };
+}
+
+/** Map backend UdhaarTransaction (uses transactionType) → frontend UdhaarTransaction (uses txType) */
+function mapBackendTransaction(
+  t: import("../backend.d.ts").UdhaarTransaction,
+): UdhaarTransaction {
+  return {
+    id: t.id,
+    customerId: t.customerId,
+    amount: t.amount,
+    txType: (t.transactionType === "give" ? "give" : "take") as "give" | "take",
+    date: t.date,
+    note: t.note,
+    status: (t.status === "paid" ? "paid" : "pending") as "pending" | "paid",
+    createdAt: Number(t.createdAt),
+  };
+}
+
+/** localStorage cache keys for optimistic reads while canister fetches */
+function udhaarCustomersCacheKey(shopId: string) {
+  return `dz_udhaar_customers_${shopId}`;
+}
+function udhaarTransactionsCacheKey(shopId: string) {
+  return `dz_udhaar_txns_${shopId}`;
+}
+
+export function useUdhaarCustomers(shopId: string) {
+  const { actor, isFetching } = useActor();
   return useQuery<UdhaarCustomer[]>({
-    queryKey: ["udhaarCustomers", providerId],
-    queryFn: () => {
-      return lsRead<UdhaarCustomer[]>(udhaarCustomersKey(providerId), []);
+    queryKey: ["udhaarCustomers", shopId],
+    queryFn: async () => {
+      if (!actor)
+        return lsRead<UdhaarCustomer[]>(udhaarCustomersCacheKey(shopId), []);
+      try {
+        const raw = await asUdhaarActor(actor).getUdhaarCustomers();
+        const mapped = raw.map(mapBackendCustomer);
+        lsWrite(udhaarCustomersCacheKey(shopId), mapped);
+        return mapped;
+      } catch {
+        return lsRead<UdhaarCustomer[]>(udhaarCustomersCacheKey(shopId), []);
+      }
     },
-    enabled: !!providerId,
+    enabled: !!shopId && !isFetching,
     staleTime: 0,
+    refetchInterval: 3000,
   });
 }
 
-export function useUdhaarTransactions(customerId: string, providerId: string) {
+export function useUdhaarTransactions(customerId: string, shopId: string) {
+  const { actor, isFetching } = useActor();
   return useQuery<UdhaarTransaction[]>({
-    queryKey: ["udhaarTransactions", customerId, providerId],
-    queryFn: () => {
-      const all = lsRead<UdhaarTransaction[]>(
-        udhaarTransactionsKey(providerId),
-        [],
-      );
-      return all.filter((t) => t.customerId === customerId);
+    queryKey: ["udhaarTransactions", customerId, shopId],
+    queryFn: async () => {
+      if (!actor) {
+        const cached = lsRead<UdhaarTransaction[]>(
+          udhaarTransactionsCacheKey(shopId),
+          [],
+        );
+        return cached.filter((t) => t.customerId === customerId);
+      }
+      try {
+        const raw =
+          await asUdhaarActor(actor).getUdhaarTransactions(customerId);
+        const mapped = (raw.__kind__ === "ok" ? raw.ok : []).map(
+          mapBackendTransaction,
+        );
+        // Merge into cache keyed by shopId so allUdhaarTransactions benefits too
+        const existing = lsRead<UdhaarTransaction[]>(
+          udhaarTransactionsCacheKey(shopId),
+          [],
+        );
+        const otherCust = existing.filter((t) => t.customerId !== customerId);
+        lsWrite(udhaarTransactionsCacheKey(shopId), [...otherCust, ...mapped]);
+        return mapped;
+      } catch {
+        const cached = lsRead<UdhaarTransaction[]>(
+          udhaarTransactionsCacheKey(shopId),
+          [],
+        );
+        return cached.filter((t) => t.customerId === customerId);
+      }
     },
-    enabled: !!customerId && !!providerId,
+    enabled: !!customerId && !!shopId && !isFetching,
     staleTime: 0,
+    refetchInterval: 3000,
   });
 }
 
-export function useAddUdhaarCustomer(providerId: string) {
+export function useAddUdhaarCustomer(shopId: string) {
+  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (
       data: Omit<UdhaarCustomer, "id" | "providerId" | "createdAt">,
     ) => {
-      const customers = lsRead<UdhaarCustomer[]>(
-        udhaarCustomersKey(providerId),
-        [],
+      if (!actor) throw new Error("Actor not available");
+      const result = await asUdhaarActor(actor).addUdhaarCustomer(
+        data.name,
+        data.mobile,
+        data.address,
       );
-      const newCustomer: UdhaarCustomer = {
-        ...data,
-        id: String(Date.now()),
-        providerId,
-        createdAt: Date.now(),
-      };
-      lsWrite(udhaarCustomersKey(providerId), [...customers, newCustomer]);
-      return newCustomer;
+      if (result.__kind__ === "err") throw new Error(result.err);
+      return mapBackendCustomer(result.ok);
     },
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["udhaarCustomers", providerId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["udhaarCustomers", shopId] });
+      qc.invalidateQueries({ queryKey: ["allUdhaarTransactions", shopId] });
+    },
   });
 }
 
-export function useUpdateUdhaarCustomer(providerId: string) {
+export function useUpdateUdhaarCustomer(shopId: string) {
+  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (
       data: Pick<UdhaarCustomer, "id" | "name" | "mobile" | "address">,
     ) => {
-      const customers = lsRead<UdhaarCustomer[]>(
-        udhaarCustomersKey(providerId),
-        [],
+      if (!actor) throw new Error("Actor not available");
+      const result = await asUdhaarActor(actor).updateUdhaarCustomer(
+        data.id,
+        data.name,
+        data.mobile,
+        data.address,
       );
-      const updated = customers.map((c) =>
-        c.id === data.id ? { ...c, ...data } : c,
-      );
-      lsWrite(udhaarCustomersKey(providerId), updated);
+      if (result.__kind__ === "err") throw new Error(result.err);
+      return mapBackendCustomer(result.ok);
     },
     onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["udhaarCustomers", providerId] }),
+      qc.invalidateQueries({ queryKey: ["udhaarCustomers", shopId] }),
   });
 }
 
-export function useDeleteUdhaarCustomer(providerId: string) {
+export function useDeleteUdhaarCustomer(shopId: string) {
+  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (customerId: string) => {
-      const customers = lsRead<UdhaarCustomer[]>(
-        udhaarCustomersKey(providerId),
-        [],
-      );
-      lsWrite(
-        udhaarCustomersKey(providerId),
-        customers.filter((c) => c.id !== customerId),
-      );
-      // Also delete all transactions for this customer
-      const txns = lsRead<UdhaarTransaction[]>(
-        udhaarTransactionsKey(providerId),
-        [],
-      );
-      lsWrite(
-        udhaarTransactionsKey(providerId),
-        txns.filter((t) => t.customerId !== customerId),
-      );
+      if (!actor) throw new Error("Actor not available");
+      const result =
+        await asUdhaarActor(actor).deleteUdhaarCustomer(customerId);
+      if (result.__kind__ === "err") throw new Error(result.err);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["udhaarCustomers", providerId] });
+      qc.invalidateQueries({ queryKey: ["udhaarCustomers", shopId] });
       qc.invalidateQueries({ queryKey: ["udhaarTransactions"] });
+      qc.invalidateQueries({ queryKey: ["allUdhaarTransactions", shopId] });
     },
   });
 }
 
-export function useAddUdhaarTransaction(providerId: string) {
+export function useAddUdhaarTransaction(shopId: string) {
+  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (
       data: Omit<UdhaarTransaction, "id" | "status" | "createdAt">,
     ) => {
-      const txns = lsRead<UdhaarTransaction[]>(
-        udhaarTransactionsKey(providerId),
-        [],
+      if (!actor) throw new Error("Actor not available");
+      const result = await asUdhaarActor(actor).addUdhaarTransaction(
+        data.customerId,
+        data.amount,
+        data.txType, // "give" | "take"
+        data.date,
+        data.note,
       );
-      const newTxn: UdhaarTransaction = {
-        ...data,
-        id: String(Date.now()),
-        status: "pending",
-        createdAt: Date.now(),
-      };
-      lsWrite(udhaarTransactionsKey(providerId), [...txns, newTxn]);
-      return newTxn;
+      if (result.__kind__ === "err") throw new Error(result.err);
+      return mapBackendTransaction(result.ok);
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({
-        queryKey: ["udhaarTransactions", vars.customerId, providerId],
+        queryKey: ["udhaarTransactions", vars.customerId, shopId],
       });
-      qc.invalidateQueries({ queryKey: ["udhaarCustomers", providerId] });
+      qc.invalidateQueries({ queryKey: ["udhaarCustomers", shopId] });
+      qc.invalidateQueries({ queryKey: ["allUdhaarTransactions", shopId] });
     },
   });
 }
 
-export function useMarkUdhaarTransactionPaid(providerId: string) {
+export function useMarkUdhaarTransactionPaid(shopId: string) {
+  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({
       txId,
       customerId,
     }: { txId: string; customerId: string }) => {
-      const txns = lsRead<UdhaarTransaction[]>(
-        udhaarTransactionsKey(providerId),
-        [],
-      );
-      lsWrite(
-        udhaarTransactionsKey(providerId),
-        txns.map((t) => (t.id === txId ? { ...t, status: "paid" } : t)),
-      );
+      if (!actor) throw new Error("Actor not available");
+      const result = await asUdhaarActor(actor).markUdhaarTransactionPaid(txId);
+      if (result.__kind__ === "err") throw new Error(result.err);
       return { txId, customerId };
     },
     onSuccess: (_data) => {
       qc.invalidateQueries({
-        queryKey: ["udhaarTransactions", _data.customerId, providerId],
+        queryKey: ["udhaarTransactions", _data.customerId, shopId],
       });
-      qc.invalidateQueries({ queryKey: ["udhaarCustomers", providerId] });
+      qc.invalidateQueries({ queryKey: ["udhaarCustomers", shopId] });
+      qc.invalidateQueries({ queryKey: ["allUdhaarTransactions", shopId] });
     },
   });
 }
 
-export function useDeleteUdhaarTransaction(providerId: string) {
+export function useDeleteUdhaarTransaction(shopId: string) {
+  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({
       txId,
       customerId,
     }: { txId: string; customerId: string }) => {
-      const txns = lsRead<UdhaarTransaction[]>(
-        udhaarTransactionsKey(providerId),
-        [],
-      );
-      lsWrite(
-        udhaarTransactionsKey(providerId),
-        txns.filter((t) => t.id !== txId),
-      );
+      if (!actor) throw new Error("Actor not available");
+      const result = await asUdhaarActor(actor).deleteUdhaarTransaction(txId);
+      if (result.__kind__ === "err") throw new Error(result.err);
       return { txId, customerId };
     },
     onSuccess: (_data) => {
       qc.invalidateQueries({
-        queryKey: ["udhaarTransactions", _data.customerId, providerId],
+        queryKey: ["udhaarTransactions", _data.customerId, shopId],
       });
-      qc.invalidateQueries({ queryKey: ["udhaarCustomers", providerId] });
+      qc.invalidateQueries({ queryKey: ["udhaarCustomers", shopId] });
+      qc.invalidateQueries({ queryKey: ["allUdhaarTransactions", shopId] });
     },
   });
 }
 
-export function useAllUdhaarTransactions(providerId: string) {
+/**
+ * Aggregates all transactions across all of this provider's customers.
+ * Used for the dashboard stats (pending count, total balance).
+ * Polls every 3 seconds for real-time sync.
+ */
+export function useAllUdhaarTransactions(shopId: string) {
+  const { actor, isFetching } = useActor();
   return useQuery<UdhaarTransaction[]>({
-    queryKey: ["allUdhaarTransactions", providerId],
-    queryFn: () =>
-      lsRead<UdhaarTransaction[]>(udhaarTransactionsKey(providerId), []),
-    enabled: !!providerId,
+    queryKey: ["allUdhaarTransactions", shopId],
+    queryFn: async () => {
+      // Use the customers list to fetch transactions per customer
+      if (!actor) {
+        return lsRead<UdhaarTransaction[]>(
+          udhaarTransactionsCacheKey(shopId),
+          [],
+        );
+      }
+      try {
+        const ua = asUdhaarActor(actor);
+        const customers = await ua.getUdhaarCustomers();
+        if (customers.length === 0) return [];
+        const txnArrays = await Promise.all(
+          customers.map((c) => ua.getUdhaarTransactions(c.id)),
+        );
+        const allMapped = txnArrays
+          .flatMap((r) => (r.__kind__ === "ok" ? r.ok : []))
+          .map(mapBackendTransaction);
+        lsWrite(udhaarTransactionsCacheKey(shopId), allMapped);
+        return allMapped;
+      } catch {
+        return lsRead<UdhaarTransaction[]>(
+          udhaarTransactionsCacheKey(shopId),
+          [],
+        );
+      }
+    },
+    enabled: !!shopId && !isFetching,
     staleTime: 0,
+    refetchInterval: 3000,
+  });
+}
+
+// =====================================================================
+// LUDO & REWARDS HOOKS
+// =====================================================================
+
+import type { LudoRedemptionRequest } from "../types/appTypes";
+
+type LudoActor = {
+  getLudoPoints: (userId: string) => Promise<bigint>;
+  addLudoPoints: (userId: string, points: bigint) => Promise<void>;
+  setLudoPoints: (userId: string, points: bigint) => Promise<void>;
+  addLudoRedemptionRequest: (
+    userId: string,
+    userName: string,
+    upiId: string,
+    pointsRequested: bigint,
+    amountInr: bigint,
+  ) => Promise<bigint>;
+  getLudoRedemptionRequests: () => Promise<LudoRedemptionRequest[]>;
+  getUserLudoRedemptionRequests: (
+    userId: string,
+  ) => Promise<LudoRedemptionRequest[]>;
+  updateLudoRedemptionStatus: (
+    requestId: bigint,
+    status: string,
+  ) => Promise<boolean>;
+  getFirebaseConfigLink: () => Promise<string>;
+  setFirebaseConfigLink: (url: string) => Promise<void>;
+};
+
+function asLudoActor(actor: unknown): LudoActor {
+  return actor as LudoActor;
+}
+
+export function useLudoPoints(userId: string) {
+  const { actor, isFetching } = useActor();
+  return useQuery<number>({
+    queryKey: ["ludoPoints", userId],
+    queryFn: async () => {
+      const lsKey = `dz_ludo_points_${userId}`;
+      if (!actor || !userId) {
+        const raw = localStorage.getItem(lsKey);
+        return raw ? Number.parseInt(raw, 10) || 0 : 0;
+      }
+      try {
+        const pts = await asLudoActor(actor).getLudoPoints(userId);
+        const val = Number(pts);
+        localStorage.setItem(lsKey, String(val));
+        return val;
+      } catch {
+        const raw = localStorage.getItem(lsKey);
+        return raw ? Number.parseInt(raw, 10) || 0 : 0;
+      }
+    },
+    enabled: !!userId && !isFetching,
+    refetchInterval: 5000,
+    staleTime: 3000,
+  });
+}
+
+export function useAddLudoPoints() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      userId,
+      points,
+    }: { userId: string; points: number }) => {
+      const lsKey = `dz_ludo_points_${userId}`;
+      const cur = Number.parseInt(localStorage.getItem(lsKey) ?? "0", 10) || 0;
+      const next = Math.max(0, cur + points);
+      localStorage.setItem(lsKey, String(next));
+      if (!actor) return;
+      try {
+        await asLudoActor(actor).addLudoPoints(userId, BigInt(points));
+      } catch {
+        // localStorage already updated
+      }
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["ludoPoints", vars.userId] });
+    },
+  });
+}
+
+export function useGetUserRedemptionRequests(userId: string) {
+  const { actor, isFetching } = useActor();
+  return useQuery<LudoRedemptionRequest[]>({
+    queryKey: ["userLudoRequests", userId],
+    queryFn: async () => {
+      if (!actor || !userId) {
+        try {
+          return JSON.parse(localStorage.getItem("dz_ludo_requests") ?? "[]");
+        } catch {
+          return [];
+        }
+      }
+      try {
+        return await asLudoActor(actor).getUserLudoRedemptionRequests(userId);
+      } catch {
+        try {
+          return JSON.parse(localStorage.getItem("dz_ludo_requests") ?? "[]");
+        } catch {
+          return [];
+        }
+      }
+    },
+    enabled: !!userId && !isFetching,
+    refetchInterval: 5000,
+  });
+}
+
+export function useAddLudoRedemptionRequest() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      userId: string;
+      userName: string;
+      upiId: string;
+      pointsRequested: number;
+      amountInr: number;
+    }) => {
+      const { userId, userName, upiId, pointsRequested, amountInr } = params;
+      if (actor) {
+        try {
+          const id = await asLudoActor(actor).addLudoRedemptionRequest(
+            userId,
+            userName,
+            upiId,
+            BigInt(pointsRequested),
+            BigInt(amountInr),
+          );
+          return Number(id);
+        } catch {
+          // fall through to localStorage
+        }
+      }
+      const req: LudoRedemptionRequest = {
+        id: Date.now(),
+        userId,
+        userName,
+        upiId,
+        pointsRequested,
+        amountInr,
+        status: "pending",
+        createdAt: new Date().toISOString(),
+      };
+      const all: LudoRedemptionRequest[] = (() => {
+        try {
+          return JSON.parse(localStorage.getItem("dz_ludo_requests") ?? "[]");
+        } catch {
+          return [];
+        }
+      })();
+      all.unshift(req);
+      localStorage.setItem("dz_ludo_requests", JSON.stringify(all));
+      return req.id;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["userLudoRequests", vars.userId] });
+      qc.invalidateQueries({ queryKey: ["allLudoRequests"] });
+    },
+  });
+}
+
+export function useGetAllLudoRedemptionRequests() {
+  const { actor, isFetching } = useActor();
+  return useQuery<LudoRedemptionRequest[]>({
+    queryKey: ["allLudoRequests"],
+    queryFn: async () => {
+      if (!actor) {
+        try {
+          return JSON.parse(localStorage.getItem("dz_ludo_requests") ?? "[]");
+        } catch {
+          return [];
+        }
+      }
+      try {
+        return await asLudoActor(actor).getLudoRedemptionRequests();
+      } catch {
+        try {
+          return JSON.parse(localStorage.getItem("dz_ludo_requests") ?? "[]");
+        } catch {
+          return [];
+        }
+      }
+    },
+    enabled: !isFetching,
+    refetchInterval: 5000,
+  });
+}
+
+export function useUpdateLudoRedemptionStatus() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      requestId,
+      status,
+    }: { requestId: number; status: string }) => {
+      if (actor) {
+        try {
+          return await asLudoActor(actor).updateLudoRedemptionStatus(
+            BigInt(requestId),
+            status,
+          );
+        } catch {
+          // fall through to localStorage
+        }
+      }
+      const all: LudoRedemptionRequest[] = (() => {
+        try {
+          return JSON.parse(localStorage.getItem("dz_ludo_requests") ?? "[]");
+        } catch {
+          return [];
+        }
+      })();
+      const updated = all.map((r) =>
+        r.id === requestId
+          ? { ...r, status: status as LudoRedemptionRequest["status"] }
+          : r,
+      );
+      localStorage.setItem("dz_ludo_requests", JSON.stringify(updated));
+      return true;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["allLudoRequests"] });
+      qc.invalidateQueries({ queryKey: ["userLudoRequests"] });
+    },
+  });
+}
+
+export function useGetFirebaseConfigLink() {
+  const { actor, isFetching } = useActor();
+  return useQuery<string>({
+    queryKey: ["firebaseConfigLink"],
+    queryFn: async () => {
+      if (!actor) return localStorage.getItem("dz_firebase_config_url") ?? "";
+      try {
+        const url = await asLudoActor(actor).getFirebaseConfigLink();
+        localStorage.setItem("dz_firebase_config_url", url);
+        return url;
+      } catch {
+        return localStorage.getItem("dz_firebase_config_url") ?? "";
+      }
+    },
+    enabled: !isFetching,
+  });
+}
+
+export function useSetFirebaseConfigLink() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (url: string) => {
+      localStorage.setItem("dz_firebase_config_url", url);
+      if (!actor) return;
+      try {
+        await asLudoActor(actor).setFirebaseConfigLink(url);
+      } catch {
+        // localStorage already saved
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["firebaseConfigLink"] }),
   });
 }

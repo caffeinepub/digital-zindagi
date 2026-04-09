@@ -1,5 +1,4 @@
 import {
-  BookOpen,
   Briefcase,
   Gamepad2,
   Globe,
@@ -30,24 +29,23 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const { lang, setLang, t } = useLanguage();
   const navigate = useNavigate();
 
-  // Game visibility — controlled by Admin toggle (dz_game_visible)
+  // Game visibility — controlled by Admin toggle (dz_game_visible) AND dz_ludo_enabled
   const [showGame, setShowGame] = useState<boolean>(() => {
-    const val = localStorage.getItem("dz_game_visible");
-    return val === null || val === "true";
-  });
-
-  // Udhaar Book visibility — controlled by Admin toggle (dz_udhaar_enabled)
-  const [showUdhaar, setShowUdhaar] = useState<boolean>(() => {
-    const val = localStorage.getItem("dz_udhaar_enabled");
-    return val === null || val === "true";
+    const gameVisible = localStorage.getItem("dz_game_visible");
+    const ludoEnabled = localStorage.getItem("dz_ludo_enabled");
+    return (
+      (gameVisible === null || gameVisible === "true") &&
+      ludoEnabled !== "false"
+    );
   });
 
   useEffect(() => {
     const syncVisibility = () => {
       const gameVal = localStorage.getItem("dz_game_visible");
-      setShowGame(gameVal === null || gameVal === "true");
-      const udhaarVal = localStorage.getItem("dz_udhaar_enabled");
-      setShowUdhaar(udhaarVal === null || udhaarVal === "true");
+      const ludoVal = localStorage.getItem("dz_ludo_enabled");
+      setShowGame(
+        (gameVal === null || gameVal === "true") && ludoVal !== "false",
+      );
     };
 
     // Listen to real-time broadcast from Admin Panel
@@ -107,15 +105,6 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     { to: "/", label: t("home"), icon: <Home size={18} /> },
     ...(showGame
       ? [{ to: "/game", label: "🎮 Game", icon: <Gamepad2 size={18} /> }]
-      : []),
-    ...(showUdhaar
-      ? [
-          {
-            to: "/udhaar-book",
-            label: "📒 उधार बुक",
-            icon: <BookOpen size={18} />,
-          },
-        ]
       : []),
     ...(user
       ? [

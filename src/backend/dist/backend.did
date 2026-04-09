@@ -238,13 +238,16 @@ service : {
    (nat);
   addServiceRate: (userId: nat, newRate: ServiceRate) -> ();
   addShopPhoto: (userId: nat, blobId: text) -> ();
-  addUdhaarCustomer: (shopId: text, name: text, mobile: text, address:
-   text) -> (variant {
-               err: text;
-               ok: UdhaarCustomer;
-             });
-  addUdhaarTransaction: (customerId: text, shopId: text, amount: float64,
-   transactionType: text, date: text, note: text) ->
+  /// Add a customer under the calling provider's shop.
+  /// shopId is derived from msg.caller — never accepted from the client.
+  addUdhaarCustomer: (name: text, mobile: text, address: text) ->
+   (variant {
+      err: text;
+      ok: UdhaarCustomer;
+    });
+  /// Add a transaction. shopId is derived from caller; customerId must belong to caller.
+  addUdhaarTransaction: (customerId: text, amount: float64, transactionType:
+   text, date: text, note: text) ->
    (variant {
       err: text;
       ok: UdhaarTransaction;
@@ -261,10 +264,12 @@ service : {
   deleteNews: (id: nat) -> (bool);
   deleteScrapRate: (id: nat) -> (bool);
   deleteServiceRate: (userId: nat, rateName: text) -> ();
+  /// Delete a customer and all its transactions. Caller must own the customer.
   deleteUdhaarCustomer: (customerId: text) -> (variant {
                                                  err: text;
                                                  ok;
                                                });
+  /// Delete a transaction. Caller must own the transaction.
   deleteUdhaarTransaction: (transactionId: text) -> (variant {
                                                        err: text;
                                                        ok;
@@ -300,9 +305,21 @@ service : {
   getRecentUsers: () -> (vec User) query;
   getScrapRates: () -> (vec ScrapRate) query;
   getSubscriptionPricing: () -> (opt SubscriptionPricing) query;
-  getUdhaarBalance: (customerId: text) -> (float64) query;
-  getUdhaarCustomers: (shopId: text) -> (vec UdhaarCustomer) query;
-  getUdhaarTransactions: (customerId: text) -> (vec UdhaarTransaction) query;
+  /// Return balance for a customer. Caller must own the customer.
+  getUdhaarBalance: (customerId: text) ->
+   (variant {
+      err: text;
+      ok: float64;
+    }) query;
+  /// Return only customers belonging to the calling provider.
+  /// shopId is derived from msg.caller — no user-supplied filter accepted.
+  getUdhaarCustomers: () -> (vec UdhaarCustomer) query;
+  /// Return transactions for a customer. Caller must own the customer.
+  getUdhaarTransactions: (customerId: text) ->
+   (variant {
+      err: text;
+      ok: vec UdhaarTransaction;
+    }) query;
   getUserById: (userId: nat) -> (opt User) query;
   getUserByMobile: (mobile: MobileNumber) -> (opt User) query;
   getUserProfile: (user: principal) -> (opt UserProfile) query;
@@ -312,6 +329,7 @@ service : {
   isCallerApproved: () -> (bool) query;
   listApprovals: () -> (vec UserApprovalInfo) query;
   login: (mobile: MobileNumber, passwordHash: text) -> (User);
+  /// Mark a transaction as paid. Caller must own the transaction.
   markUdhaarTransactionPaid: (transactionId: text) ->
    (variant {
       err: text;
@@ -350,11 +368,13 @@ service : {
    float64, enabled: bool) -> (bool);
   updateSubscriptionPricing: (newPricing: SubscriptionPricing) -> ();
   updateToggle: (toggleName: text, value: bool) -> ();
+  /// Update a customer. Caller must own the customer (shopId check).
   updateUdhaarCustomer: (customerId: text, name: text, mobile: text, address:
    text) -> (variant {
                err: text;
                ok: UdhaarCustomer;
              });
+  /// Update a transaction. Caller must own the transaction (shopId check).
   updateUdhaarTransaction: (transactionId: text, amount: float64,
    transactionType: text, date: text, note: text) ->
    (variant {

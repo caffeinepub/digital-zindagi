@@ -202,14 +202,21 @@ export interface backendInterface {
     addScrapRate(itemName: string, ratePerKg: number, ratePerGram: number): Promise<bigint>;
     addServiceRate(userId: bigint, newRate: ServiceRate): Promise<void>;
     addShopPhoto(userId: bigint, blobId: string): Promise<void>;
-    addUdhaarCustomer(shopId: string, name: string, mobile: string, address: string): Promise<{
+    /**
+     * / Add a customer under the calling provider's shop.
+     * / shopId is derived from msg.caller — never accepted from the client.
+     */
+    addUdhaarCustomer(name: string, mobile: string, address: string): Promise<{
         __kind__: "ok";
         ok: UdhaarCustomer;
     } | {
         __kind__: "err";
         err: string;
     }>;
-    addUdhaarTransaction(customerId: string, shopId: string, amount: number, transactionType: string, date: string, note: string): Promise<{
+    /**
+     * / Add a transaction. shopId is derived from caller; customerId must belong to caller.
+     */
+    addUdhaarTransaction(customerId: string, amount: number, transactionType: string, date: string, note: string): Promise<{
         __kind__: "ok";
         ok: UdhaarTransaction;
     } | {
@@ -227,6 +234,9 @@ export interface backendInterface {
     deleteNews(id: bigint): Promise<boolean>;
     deleteScrapRate(id: bigint): Promise<boolean>;
     deleteServiceRate(userId: bigint, rateName: string): Promise<void>;
+    /**
+     * / Delete a customer and all its transactions. Caller must own the customer.
+     */
     deleteUdhaarCustomer(customerId: string): Promise<{
         __kind__: "ok";
         ok: null;
@@ -234,6 +244,9 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
+    /**
+     * / Delete a transaction. Caller must own the transaction.
+     */
     deleteUdhaarTransaction(transactionId: string): Promise<{
         __kind__: "ok";
         ok: null;
@@ -267,9 +280,31 @@ export interface backendInterface {
     getRecentUsers(): Promise<Array<User>>;
     getScrapRates(): Promise<Array<ScrapRate>>;
     getSubscriptionPricing(): Promise<SubscriptionPricing | null>;
-    getUdhaarBalance(customerId: string): Promise<number>;
-    getUdhaarCustomers(shopId: string): Promise<Array<UdhaarCustomer>>;
-    getUdhaarTransactions(customerId: string): Promise<Array<UdhaarTransaction>>;
+    /**
+     * / Return balance for a customer. Caller must own the customer.
+     */
+    getUdhaarBalance(customerId: string): Promise<{
+        __kind__: "ok";
+        ok: number;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    /**
+     * / Return only customers belonging to the calling provider.
+     * / shopId is derived from msg.caller — no user-supplied filter accepted.
+     */
+    getUdhaarCustomers(): Promise<Array<UdhaarCustomer>>;
+    /**
+     * / Return transactions for a customer. Caller must own the customer.
+     */
+    getUdhaarTransactions(customerId: string): Promise<{
+        __kind__: "ok";
+        ok: Array<UdhaarTransaction>;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     getUserById(userId: bigint): Promise<User | null>;
     getUserByMobile(mobile: MobileNumber): Promise<User | null>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
@@ -279,6 +314,9 @@ export interface backendInterface {
     isCallerApproved(): Promise<boolean>;
     listApprovals(): Promise<Array<UserApprovalInfo>>;
     login(mobile: MobileNumber, passwordHash: string): Promise<User>;
+    /**
+     * / Mark a transaction as paid. Caller must own the transaction.
+     */
     markUdhaarTransactionPaid(transactionId: string): Promise<{
         __kind__: "ok";
         ok: UdhaarTransaction;
@@ -310,6 +348,9 @@ export interface backendInterface {
     updateScrapRate(id: bigint, itemName: string, ratePerKg: number, ratePerGram: number, enabled: boolean): Promise<boolean>;
     updateSubscriptionPricing(newPricing: SubscriptionPricing): Promise<void>;
     updateToggle(toggleName: string, value: boolean): Promise<void>;
+    /**
+     * / Update a customer. Caller must own the customer (shopId check).
+     */
     updateUdhaarCustomer(customerId: string, name: string, mobile: string, address: string): Promise<{
         __kind__: "ok";
         ok: UdhaarCustomer;
@@ -317,6 +358,9 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
+    /**
+     * / Update a transaction. Caller must own the transaction (shopId check).
+     */
     updateUdhaarTransaction(transactionId: string, amount: number, transactionType: string, date: string, note: string): Promise<{
         __kind__: "ok";
         ok: UdhaarTransaction;
